@@ -18,9 +18,9 @@ Params:
 - init_ts: checkpoint restart timestep 
 
 Example: 
-(1) 3D wave equation, multiple rain drops, Mur condition, dissipation rate of 5e-3, writing out the uncompressed data:
+- 3D wave equation, multiple rain drops, Mur condition, dissipation rate of 5e-3, writing out the uncompressed data:
     ./waveProp_3d 3 false false 2 20 20 20 0.1 0.2 80 0.2 5e-3 0.0 ABS fiveRainDrop_20_20_20_h01_t02_Mur.bp nan 0 
-(2) previous case, with compression:
+- previous case, with compression:
     ./waveProp_3d 3 false false 2 20 20 20 0.1 0.2 80 0.2 5e-3 1e-3 ABS fiveRainDrop_20_20_20_h01_t02_Mur_mgr_abs_1e-3.bp fiveRainDrop_20_20_20_h01_t02_Mur.bp 0 
-(3) checkpoint restart @ the 1000th timestep, propagating the erronous data to 3000 timesteps and writing out the timestep results:
+- checkpoint restart @ the 1000th timestep, propagating the erronous data to 3000 timesteps and writing out the timestep results:
     ./waveProp_3d 3 false false 2 20 20 20 0.1 0.2 60 0.2 1e-3 0.0 ABS fiveRainDrop_20_20_20_h01_t02_Mur_mgr_abs_1e-3_start_1000ts.bp fiveRainDrop_20_20_20_h01_t02_Mur_mgr_abs_1e-3.bp 1000 
