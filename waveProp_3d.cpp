@@ -188,11 +188,13 @@ int main(int argc, char **argv) {
     double dh      = std::stof(argv[cnt_argv++]);
     // simulation temporal resolution
     double dt      = std::stof(argv[cnt_argv++]);
-    // wave speed
-    double C       = std::stof(argv[cnt_argv++]);
     // number of simulation frames
     float T        = std::stof(argv[cnt_argv++]);
     float temp     = T / dt;
+    // wave speed
+    double C       = std::stof(argv[cnt_argv++]);
+    // dissipation rate
+    double gamma   = std::stof(argv[cnt_argv++]);    
     size_t nframes = (size_t)(temp);
     // relative tolerance. tol = 0 means to write out uncompressed data after each timestep
     double tol     = std::stof(argv[cnt_argv++]);
@@ -220,7 +222,6 @@ int main(int argc, char **argv) {
     else std::cout << "exponential wave velocity\n";
     std::cout << "simulating boundary condiction: ";
     if (cfd_cond==1) std::cout << "Dirichlet\n";
-    else if (cfd_cond==2) std::cout << "Nueman\n";
     else std::cout << "Mur\n"; 
 
     adios2::ADIOS ad(MPI_COMM_WORLD);
@@ -252,7 +253,6 @@ int main(int argc, char **argv) {
     std::vector<mgard_x::SIZE> shape{Nx, Ny, Nz};
     double s = 0.0;
     size_t compressed_size_step = 0;
-    double gamma = 0.0;
     WaveEquation <double> waveSim(Nx-1, Ny-1, Nz-1, dt, dh, C, gamma, cfd_cond); 
 
     if ((init_fun==2) || (init_fun==3)) {
