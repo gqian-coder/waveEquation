@@ -37,12 +37,12 @@ public:
 
     //! Vector array u_{i,j}^{n+1}
     std::vector<Real> u_np1;
-
-private:
-    //! Vector array u_{i,j}^{n-1} 
+    //! Vector array u_{i,j}^{n-1}
     std::vector<Real> u_nm1;
     //! Vector array u_{i,j}^{n}
-    std::vector<Real> u_n; 
+    std::vector<Real> u_n;
+
+private:
     std::size_t Nx;
     std::size_t Ny;
     std::size_t Nz;

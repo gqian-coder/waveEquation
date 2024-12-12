@@ -163,7 +163,7 @@ void WaveEquation<Real>::update_2d(bool init_cond)
                 u_np1[c] = 0;
                 u_np1[c+offset_r] = 0;
             }
-            for (size_t r=0; r<Nx+1; r++) {
+            for (size_t r=1; r<Nx; r++) {
                 offset_r = r * (Ny+1);
                 u_np1[offset_r]    = 0;
                 u_np1[offset_r+Ny] = 0;
@@ -219,6 +219,37 @@ void WaveEquation<Real>::update_2d(bool init_cond)
                 offset_r = r * (Ny+1);
                 k        = offset_r + Ny;
                 u_np1[k] = u_n[k] + init_cond*(u_n[k]-u_nm1[k]) + alpha2*(u_n[k+Ny+1] - 4*u_n[k] + u_n[k-Ny-1] + 2*u_n[k-1]);
+            }
+            break;
+        }
+        case 4: // Periodic cond
+        {
+            // r = 0
+            offset_r = (Nx-1) * (Ny+1);
+            for (size_t c=1; c<Ny; c++) {
+                u_np1[c] = 2 * u_n[c] - u_nm1[c] - gamma_t * (u_n[c]-u_nm1[c]) + alpha2 * (
+                       u_n[offset_r+c] + u_n[c+Ny+1] + u_n[c-1] + u_n[c+1] - 4*u_n[c]);
+            }
+            // c = 0
+            for (size_t r=1; r<Nx; r++) {
+                k = r * (Ny+1);
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
+                       u_n[k-Ny-1] + u_n[k+Ny+1] + u_n[k+Ny-1] + u_n[k+1] - 4*u_n[k]); 
+            }
+            // corner
+            u_np1[0] = 2 * u_n[0] - u_nm1[0] - gamma_t * (u_n[0]-u_nm1[0]) + alpha2 * (
+                       u_n[offset_r] + u_n[Ny+1] + u_n[Ny-1] + u_n[1] - 4*u_n[0]); 
+            k = Nx*(Ny+1);
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
+                       u_n[k-Ny-1] + u_n[Ny+1] + u_n[k+Ny-1] + u_n[k+1] - 4*u_n[k]);
+            // open boundary
+            offset_r = Nx * (Ny+1);
+            for (size_t c=1; c<Ny; c++) {
+                u_np1[c+offset_r] = u_np1[c] ;
+            }
+            for (size_t r=0; r<Nx+1; r++) {
+                offset_r = r * (Ny+1);
+                u_np1[offset_r+Ny] = u_np1[offset_r];
             }
             break;
         }
