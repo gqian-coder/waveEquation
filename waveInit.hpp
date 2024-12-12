@@ -1,6 +1,10 @@
 #ifndef WAVEINIT_HPP
 #define WAVEINIT_HPP
 
+// an array of plane wave starting from x=0
+template <typename Real>
+void fun_plane_waves(Real *u, size_t Nx, size_t Ny, Real A, Real freq, size_t nWaves);
+
 // A: magnitude of the sinusoid signal
 // sigma: Gaussian sigma
 // freq: frequency
@@ -42,7 +46,7 @@ void fun_rainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
 // drop multiple droplets
 template <typename Real>
 void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
-                  Real *gauss_template, float drop_probability, int nDrops);
+                  Real *gauss_template, float drop_probability, size_t nDrops);
 
 #include "waveInit.tpp"
 #endif

@@ -14,6 +14,7 @@
 #include "waveEquation.hpp"
 #include <zstd.h>
 #include "waveInit.hpp"
+#include "obstacle.hpp"
 
 template <typename T>
 void error_calc(std::vector<T> var_in, T *var_out, double tolerance)
@@ -48,8 +49,7 @@ int main(int argc, char **argv) {
     //           1, 2, 3, 4, 5 --> sinusoidal, rain drop, multiple rains, square, velocity 
     // cfd_cond: 1, 2, 3 --> Dirichlet, Mur boundary condition, Nueman
     int init_fun   = std::stoi(argv[cnt_argv++]);
-    bool continuous_update; 
-    std::istringstream(argv[cnt_argv++]) >> std::boolalpha >> continuous_update;
+    int obstacle_t = std::stoi(argv[cnt_argv++]); 
     bool iterative_sim;
     std::istringstream(argv[cnt_argv++]) >> std::boolalpha >> iterative_sim;
     int cfd_cond   = std::stoi(argv[cnt_argv++]); 
@@ -92,6 +92,9 @@ int main(int argc, char **argv) {
     else if (init_fun==2) std::cout << "random raindrop\n";
     else if (init_fun==3) std::cout << "multiple rain drop\n";
     else if (init_fun==4) std::cout << "solid square\n";
+    else if (init_fun==5) std::cout << "velocity fun in Gaussian\n";
+    else if (init_fun==6) std::cout << "gaussian sinusoid waves\n";
+    else if (init_fun==7) std::cout << "plane waves starting from x=0\n";
     else std::cout << "exponential wave velocity\n";
     std::cout << "simulating boundary condiction: ";
     if (cfd_cond==1) std::cout << "Dirichlet\n";
@@ -123,7 +126,6 @@ int main(int argc, char **argv) {
     }
     */
     float max_intensity = 10.0;
-    float center_x = 0.5, center_y = 0.5;
     float freq = 2.0 * M_PI / T;
     float drop_probability = 1;
     std::vector<double> gauss_template;
@@ -142,6 +144,21 @@ int main(int argc, char **argv) {
     double data_bytes = (double) Nx * Ny * sizeof(double);
     std::vector<double> compression_ratio(2);
     WaveEquation <double> waveSim(Nx-1, Ny-1, 0, dt, dh, C, gamma, cfd_cond); 
+    double *obstacle_m = NULL;
+    if (obstacle_t) {
+        switch (obstacle_t) {
+            case 1: {
+                size_t n_disks    = 6;
+                size_t max_radius = size_t(0.02 * Nx);  
+                obstacle_m        = emulate_N_disk<double>(Nx, Ny, n_disks, max_radius);
+                break;
+            }
+            case 2: {
+                obstacle_m = emulate_two_slits<double>(Nx, Ny);
+                break;
+            }
+        }
+    }
 
     if ((init_fun==2) || (init_fun==3)) {
         // Width of the Gaussian profile for each initial drop.
@@ -241,9 +258,19 @@ int main(int argc, char **argv) {
             std::vector<double> freq_x = {freq*60, freq*85, freq*95, freq*50};
             std::vector<double> freq_y = {freq*70, freq*85, freq*105, freq*68};
             fun_gaussian_wave(waveSim.u_np1.data(), Nx, Ny, intensity, sigma, freq_x, freq_y, n_waves);
+            break;
+        }
+        case 7: {
+            size_t n_waves = size_t(0.02 * (double)Ny);
+            fun_plane_waves<double>(waveSim.u_np1.data(), Nx, Ny, max_intensity, freq, n_waves);
+            break;
         }
         default:
             break; 
+    }
+    if (obstacle_t) {
+            // apply Dirichlet boundary condition to the scattering on obstacles
+            std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), obstacle_m, waveSim.u_np1.begin(), std::multiplies<double>());
     }
 
     drop_probability  = 0.01; 
@@ -251,22 +278,12 @@ int main(int argc, char **argv) {
     while (iter_frame<nframes) {
         std::cout << iter_frame << "/" << nframes << "\n";
         writer.BeginStep();
-        // initial data
-        if (continuous_update) {
-            switch (init_fun) {
-                case 1:
-                    fun_sinusoidal<double>(waveSim.u_np1.data(), Nx, Ny, center_x, center_y, max_intensity, iter_frame, freq);
-                    break;
-                case 2:
-                    fun_rainDrop<double>(waveSim.u_np1.data(), Nx, Ny, NDx, NDy, gauss_template.data(), drop_probability);
-                    break;
-                case 3:
-                    fun_MultiRainDrop<double>(waveSim.u_np1.data(), Nx, Ny, NDx, NDy, gauss_template.data(), drop_probability, n_drops);
-                default:
-                    break;
-            }
-        }
+        // wave update 
         waveSim.update_2d(static_cast<bool>(iter_frame)); 
+        if (obstacle_t) {
+            // apply Dirichlet boundary condition to the scattering on obstacles
+            std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), obstacle_m, waveSim.u_np1.begin(), std::multiplies<double>());
+        }
         if (tol>0) {
             void *compressed_array_cpu  = NULL;
             void *compressed_array2_cpu = NULL;
@@ -317,7 +334,8 @@ int main(int argc, char **argv) {
         writer.EndStep(); 
     }
     writer.Close();
-
+    
+    delete [] obstacle_m;
     MPI_Finalize();
     return 0;
 }

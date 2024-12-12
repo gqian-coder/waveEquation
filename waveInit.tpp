@@ -4,6 +4,24 @@
 #include <iostream>
 #include <vector>
 
+# define pi 3.141592653
+
+// an array of plane wave starting from x=0 
+template <typename Real>
+void fun_plane_waves(Real *u, size_t Nx, size_t Ny, Real A, Real freq, size_t nWaves)
+{
+    if (nWaves >= Nx) {
+        std::cout << "Error::the number of waves cannot be larger than the size of data space\n";
+    }
+    double dy = 1.0 / (double)Ny;
+    for (size_t r=0; r<nWaves; r++) {
+        for (size_t c=0; c<Ny; c++) {
+            u[r*Ny+c] = A * std::sin(1.0/nWaves*freq) * std::sin(pi*dy*c);
+        }
+    }
+}
+
+// Gaussian sinusoid waves
 // A: magnitude of the sinusoid signal
 // sigma: Gaussian sigma
 // freq: frequency
@@ -59,7 +77,7 @@ void fun_sinusoidal(Real *u, size_t Nx, size_t Ny, float center_x, float center_
     }
     size_t pos_x = static_cast<size_t>(Nx*center_x);
     size_t pos_y = static_cast<size_t>(Ny*center_y);
-    u[pos_x * Ny + pos_y] = A * sin(iter*freq);
+    u[pos_x * Ny + pos_y] += A * sin(iter*freq);
     //std::cout << pos_x * Ny + pos_y << ", " << pos_x << ", " << Ny << ", " << pos_y << ", " << u[pos_x * Ny + pos_y] << "\n";
 }
 
@@ -129,7 +147,7 @@ void fun_rainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
         //std::cout << "x, y = " << x << ", " << y  << ", "<< cx << ", " << cy << ", " << NDx << ", " << NDy << ", " << Nx << ", " << Ny<< "\n";
         for (size_t r=0; r<NDx; r++) {
             for (size_t c=0; c<NDy; c++) {
-                u[(x-cx + r)*Ny + (y-cy+c)] = gauss_template[r*NDy+c];
+                u[(x-cx + r)*Ny + (y-cy+c)] += gauss_template[r*NDy+c];
                 //std::cout << gauss_template[r*NDy+c] << "\n";
             }
         }
@@ -140,7 +158,7 @@ void fun_rainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
 // drop multiple droplets
 template <typename Real>
 void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
-                  Real *gauss_template, float drop_probability, int nDrops)
+                  Real *gauss_template, float drop_probability, size_t nDrops)
 {
     size_t cx = (size_t)(NDx/2);
     size_t cy = (size_t)(NDy/2);
@@ -149,7 +167,7 @@ void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
     std::uniform_real_distribution<> dis(0.0, 1.0);
     float random_number = dis(gen);
     //std::cout << "probability: " << random_number << "\n";
-    for (int d=0; d<nDrops; d++) {
+    for (size_t d=0; d<nDrops; d++) {
         if (random_number < drop_probability) {
             float random_x = dis(gen);
             float random_y = dis(gen);
