@@ -140,7 +140,6 @@ void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
 }
 
 
-
 int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
     int rank, np_size;
@@ -230,9 +229,9 @@ int main(int argc, char **argv) {
     config.dev_type = mgard_x::device_type::CUDA;
     //config.dev_id   = 1;
     std::vector<mgard_x::SIZE> shape{Nx, Ny};
-    double s = 0.0;
+    double s = 1.0;
     size_t compressed_size_step = 0;
-    WaveEquation <double> waveSim(Nx-1, Ny-1, 1, dt, dh, C, gamma, cfd_cond); 
+    WaveEquation <double> waveSim(Nx-1, Ny-1, 0, dt, dh, C, gamma, cfd_cond); 
 
     if ((init_fun==2) || (init_fun==3)) {
         // Width of the Gaussian profile for each initial drop.
@@ -270,12 +269,13 @@ int main(int argc, char **argv) {
             variable.SetStepSelection({init_ts, 1}); 
             reader.Get(variable, init_v);
             reader.PerformGets();
-            std::cout << *std::min_element(init_v, init_v+Nx*Ny) << ", " << *std::max_element(init_v, init_v+Nx*Ny) << "\n";
+            std::cout << "u_prev: min/max = " << *std::min_element(init_v, init_v+Nx*Ny) << ", " << *std::max_element(init_v, init_v+Nx*Ny) << "\n";
             waveSim.init_u_n(init_v); 
+            std::cout << "begin to load the current step...\n";
             variable.SetStepSelection({init_ts+1, 1});
             reader.Get(variable, init_v);
             reader.PerformGets();
-            std::cout << *std::min_element(init_v, init_v+Nx*Ny) << ", " << *std::max_element(init_v, init_v+Nx*Ny) << "\n";
+            std::cout <<  "u_curr: min/max = " << *std::min_element(init_v, init_v+Nx*Ny) << ", " << *std::max_element(init_v, init_v+Nx*Ny) << "\n";
             waveSim.init_u_np1(init_v);
             reader.Close();
             break;
@@ -337,7 +337,7 @@ int main(int argc, char **argv) {
             void *decompressed_array_cpu = NULL;
             mgard_x::decompress(compressed_array_cpu, compressed_size_step,
                 decompressed_array_cpu, config, false);
-
+            std::cout << ((double *)decompressed_array_cpu)[1000] << "\n"; 
             writer.Put<double>(variable_wt, (double *)decompressed_array_cpu, adios2::Mode::Sync);
             if (iterative_sim) {
                 std::cout << "iterative update solution over time step\n";
