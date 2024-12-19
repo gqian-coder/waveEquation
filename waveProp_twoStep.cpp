@@ -308,7 +308,6 @@ int main(int argc, char **argv) {
                     mgard_x::error_bound_type::ABS, waveSim.u_np1.data(),
                     compressed_array_cpu, compressed_size_u, config, false);
                 
-                std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), waveSim.u_n.begin(), u_dt.begin(), std::minus<double>());
                 mgard_x::compress(2, mgard_x::data_type::Double, shape, tol*tol_ratio, s2,
                     mgard_x::error_bound_type::ABS, u_dt.data(),
                     compressed_array2_cpu, compressed_size_dt, config, false);
