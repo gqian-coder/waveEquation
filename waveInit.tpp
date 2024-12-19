@@ -4,8 +4,6 @@
 #include <iostream>
 #include <vector>
 
-# define pi 3.141592653
-
 // an array of plane wave starting from x=0 
 template <typename Real>
 void fun_plane_waves(Real *u, size_t Nx, size_t Ny, Real A, Real freq, size_t nWaves)
@@ -16,7 +14,7 @@ void fun_plane_waves(Real *u, size_t Nx, size_t Ny, Real A, Real freq, size_t nW
     double dy = 1.0 / (double)Ny;
     for (size_t r=0; r<nWaves; r++) {
         for (size_t c=0; c<Ny; c++) {
-            u[r*Ny+c] = A * std::sin(1.0/nWaves*freq) * std::sin(pi*dy*c);
+            u[r*Ny+c] = A * std::sin(1.0/nWaves*freq) * std::sin(M_PI*dy*c);
         }
     }
 }

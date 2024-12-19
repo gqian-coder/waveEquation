@@ -15,7 +15,7 @@ set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -Wfatal-errors 
 add_executable(waveProp waveProp.cpp waveEquation.tpp)
 target_link_libraries(waveProp adios2::adios2 MPI::MPI_C mgard::mgard)
 
-add_executable(waveProp_twoStep waveProp_twoStep.cpp waveEquation.tpp waveInit.tpp)
+add_executable(waveProp_twoStep waveProp_twoStep.cpp waveEquation.tpp waveInit.tpp obstacle.tpp)
 target_link_libraries(waveProp_twoStep adios2::adios2 MPI::MPI_C mgard::mgard)
 
 add_executable(waveProp_mgr waveProp_mgr.cpp waveEquation.tpp)

@@ -92,10 +92,14 @@ int main(int argc, char **argv) {
     else if (init_fun==2) std::cout << "random raindrop\n";
     else if (init_fun==3) std::cout << "multiple rain drop\n";
     else if (init_fun==4) std::cout << "solid square\n";
-    else if (init_fun==5) std::cout << "velocity fun in Gaussian\n";
+    else if (init_fun==5) std::cout << "expoenential velocity fun\n";
     else if (init_fun==6) std::cout << "gaussian sinusoid waves\n";
     else if (init_fun==7) std::cout << "plane waves starting from x=0\n";
-    else std::cout << "exponential wave velocity\n";
+    
+    if (obstacle_t==1) std::cout << "emulating multiple disk obstacles\n";
+    if (obstacle_t==2) std::cout << "emulating two slits, recommending using plane wave\n";
+    else std::cout << "no obstacle\n";
+ 
     std::cout << "simulating boundary condiction: ";
     if (cfd_cond==1) std::cout << "Dirichlet\n";
     else if (cfd_cond==2) std::cout << "Mur\n";
@@ -130,7 +134,7 @@ int main(int argc, char **argv) {
     float drop_probability = 1;
     std::vector<double> gauss_template;
     double NDx = 12, NDy=24;
-    size_t n_drops = 5;
+    size_t n_drops = 3;
     double s1 = 1.0, s2 = 0.0; 
 
     // compression parameters
@@ -148,9 +152,11 @@ int main(int argc, char **argv) {
     if (obstacle_t) {
         switch (obstacle_t) {
             case 1: {
-                size_t n_disks    = 6;
-                size_t max_radius = size_t(0.02 * Nx);  
-                obstacle_m        = emulate_N_disk<double>(Nx, Ny, n_disks, max_radius);
+                size_t n_disks    = 10;
+                size_t max_radius = size_t(0.015 * Nx);  
+                std::vector<size_t> x_pos = {311, 383, 221, 19, 272, 235, 571, 477, 430, 457};
+                std::vector<size_t> y_pos = {426, 182, 223, 37, 9, 94, 148, 29, 245, 295};
+                obstacle_m        = emulate_N_disk<double>(Nx, Ny, n_disks, max_radius, x_pos, y_pos);
                 break;
             }
             case 2: {
@@ -179,7 +185,9 @@ int main(int argc, char **argv) {
         std::cout << "rainDrop region: " << NDx << " x " << NDy << " pixels\n";
         for (size_t r=0; r<NDx; r++) {
             for (size_t c=0; c<NDy; c++) {
-                gauss_template[r*NDy+c] = max_intensity * exp(-(px[r]*px[r] + py[c]*py[c]));
+                if ((r-cx)*(r-cx)+(c-cy)*(c-cy) < NDx*NDx) {
+                    gauss_template[r*NDy+c] = max_intensity * exp(-(px[r]*px[r] + py[c]*py[c]));
+                }
             }
         }
     }
@@ -204,9 +212,11 @@ int main(int argc, char **argv) {
             std::cout << "u_prev: min/max = " << *std::min_element(init_vpre.begin(), init_vpre.end()) << ", " << *std::max_element(init_vpre.begin(), init_vpre.end()) << "\n";
             std::cout << "begin to load the current step...\n";
             if ((init_ts>0)  && (tol==0)) {  
+                std::cout << "read u_dt\h";
                 variable = reader_io.InquireVariable<double>("u_data");
                 variable.SetStepSelection({init_ts, 1});
             } else {
+                std::cout << "read u_{n+1}\n";
                 variable.SetStepSelection({init_ts+1, 1});
             }
             reader.Get(variable, init_v.data());
@@ -253,16 +263,16 @@ int main(int argc, char **argv) {
         }
         case 6: {
             int n_waves = 4;
-            std::vector<double> sigma = {5, 2, 7.5, 10};
+            std::vector<double> sigma = {50, 25, 35, 60};
             std::vector<double> intensity = {25, 30, 45, 15};
-            std::vector<double> freq_x = {freq*60, freq*85, freq*95, freq*50};
-            std::vector<double> freq_y = {freq*70, freq*85, freq*105, freq*68};
+            std::vector<double> freq_x = {freq*T/18.0, freq*T/18.0, freq*T/24.0, freq*T/22.0};
+            std::vector<double> freq_y = {freq*T/18.0, freq*T/32.0, freq*T/17.0, freq*T/18.0};
             fun_gaussian_wave(waveSim.u_np1.data(), Nx, Ny, intensity, sigma, freq_x, freq_y, n_waves);
             break;
         }
         case 7: {
             size_t n_waves = size_t(0.02 * (double)Ny);
-            fun_plane_waves<double>(waveSim.u_np1.data(), Nx, Ny, max_intensity, freq, n_waves);
+            fun_plane_waves<double>(waveSim.u_np1.data(), Nx, Ny, 5*max_intensity, freq*T/20.0, n_waves);
             break;
         }
         default:
@@ -271,6 +281,7 @@ int main(int argc, char **argv) {
     if (obstacle_t) {
             // apply Dirichlet boundary condition to the scattering on obstacles
             std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), obstacle_m, waveSim.u_np1.begin(), std::multiplies<double>());
+            std::transform(waveSim.u_n.begin(), waveSim.u_n.end(), obstacle_m, waveSim.u_n.begin(), std::multiplies<double>());
     }
 
     drop_probability  = 0.01; 
@@ -287,6 +298,11 @@ int main(int argc, char **argv) {
         if (tol>0) {
             void *compressed_array_cpu  = NULL;
             void *compressed_array2_cpu = NULL;
+            std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), waveSim.u_n.begin(), u_dt.begin(), std::minus<double>());
+            if (obstacle_t) {
+                // apply Dirichlet boundary condition to the scattering on obstacles
+                std::transform(u_dt.begin(), u_dt.end(), obstacle_m, u_dt.begin(), std::multiplies<double>());
+            }
             if (strcmp(eb_type.c_str(), "ABS")==0) {
                 mgard_x::compress(2, mgard_x::data_type::Double, shape, tol, s1,
                     mgard_x::error_bound_type::ABS, waveSim.u_np1.data(),
@@ -301,7 +317,6 @@ int main(int argc, char **argv) {
                     mgard_x::error_bound_type::REL, waveSim.u_np1.data(),
                     compressed_array_cpu, compressed_size_u, config, false);
 
-                std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), waveSim.u_n.begin(), u_dt.begin(), std::minus<double>());
                 mgard_x::compress(2, mgard_x::data_type::Double, shape, tol*tol_ratio, s2,
                     mgard_x::error_bound_type::REL, u_dt.data(),
                     compressed_array2_cpu, compressed_size_dt, config, false);
