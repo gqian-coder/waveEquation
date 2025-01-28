@@ -10,22 +10,27 @@ public:
     //!\param C wave speed
     //!\param gamma dissipation rate
     //!\param use_condition Simulation boundary condiction
-    //! use_condiction == 1: Dirichlet bound cond
-    //! use_condiction == 2: Mur bound cond
-    //! use_condiction == 3: Nuemann bound cond
+    //! use_condition == 1: Dirichlet bound cond
+    //! use_condition == 2: Mur bound cond
+    //! use_condition == 3: Periodic bound cond
     WaveEquation(const std::size_t Nx,
                  const std::size_t Ny,
                  const std::size_t Nz,
                  Real dt,
                  Real dh,
-                 Real c,
                  Real gamma,
                  int use_condition);
 
     //! Update the simulation by one time tick.
-    void update_2d(bool init_cond);
+    void update_2d();
     void update_3d();
 
+    // velocity of sound speed
+    std::vector<Real> vp;
+
+    // initialize velocity (speed of sound in different materials)
+    void init_vp(Real *data);
+    
     // initial current ts data values
     void init_u_n(Real *data);
 
@@ -48,10 +53,9 @@ private:
     std::size_t Nz;
     Real dt;
     Real dh;
-    Real C; 
+    // damp term 
     Real gamma;
-    Real alpha;
-    Real alpha2;
+    std::vector<Real> alpha2;
     int use_condition;
 };
 

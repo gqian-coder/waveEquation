@@ -1,52 +1,60 @@
 #ifndef WAVEINIT_HPP
 #define WAVEINIT_HPP
 
-// an array of plane wave starting from x=0
+// an array of plane wave starting from x=px
 template <typename Real>
-void fun_plane_waves(Real *u, size_t Nx, size_t Ny, Real A, Real freq, size_t nWaves);
+void fun_plane_waves(Real *u, size_t Nx, size_t Ny, size_t px,
+                     Real A, Real freq, size_t nWaves);
 
 // A: magnitude of the sinusoid signal
 // sigma: Gaussian sigma
 // freq: frequency
 template <typename Real>
-void fun_gaussian_wave(Real *u, size_t Nx, size_t Ny, std::vector<Real> A,
+void fun_gaussian_wave(Real *u, size_t Nx, size_t Ny, size_t Nz, std::vector<Real> A,
                         std::vector<Real> sigma, std::vector<Real> freq_x,
-                        std::vector<Real> freq_y, int nWaves);
-
-
-// center_x, center_y: percentage, location in the x and y-axis
-// A: magnitude of the sinusoid signal
-// iter: iteration of the update
-// freq: frequency -- 2*M_PI/T
-template <typename Real>
-void fun_sinusoidal(Real *u, size_t Nx, size_t Ny, float center_x, float center_y,
-                    Real A, size_t iter, Real freq);
+                        std::vector<Real> freq_y, std::vector<Real> freq_z, int nWaves);
 
 
 // A: magnitude
 template <typename Real>
-void fun_velocity(Real *u, size_t Nx, size_t Ny, Real dx, Real dy, Real A, Real sigma);
+void fun_Gaussian(Real *u, size_t Nx, size_t Ny, size_t Nz,
+                  Real dx, Real dy, Real dz, Real A, Real sigma);
 
 
 // initialization of a solid square
 // NDx, NDy: square's dimension
 template<typename Real>
-void fun_square(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy, Real intensity);
-
+void fun_square(Real *u, size_t Nx, size_t Ny, size_t Nz,
+                size_t NDx, size_t NDy, size_t NDz, Real intensity);
 
 // drop_probability: Raindrop probability (with each time tick) and intensity.
 // NDx, NDy: droplet's region
 // one droplet at each time
 template <typename Real>
-void fun_rainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
+void fun_rainDrop(Real *u, size_t Nx, size_t Ny, size_t Nz,
+                  size_t NDx, size_t NDy, size_t NDz,
                   Real *gauss_template, float drop_probability);
-
 
 // drop_probability: Raindrop probability (with each time tick) and intensity.
 // drop multiple droplets
 template <typename Real>
-void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t NDx, size_t NDy,
-                  Real *gauss_template, float drop_probability, size_t nDrops);
+void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t Nz,
+                       size_t NDx, size_t NDy, size_t NDz,
+                       Real *gauss_template, float drop_probability, size_t nDrops);
+
+// Gaussian pulse point source: ts = time - t0
+template <typename Real>
+Real src_Gaussian_pulse(Real freq, Real ts, Real A);
+
+// initializing the domain using a Gaussian pulse
+template <typename Real>
+void fun_Gaussian_pulse(Real *u, Real freq, Real t0, Real A, size_t xsrc, size_t ysrc,
+                    size_t zsrc, size_t Ny, size_t Nz);
+
+// wave velocity across domain, separating along x-axis, 1/n_vp fraction
+template <typename Real>
+void velocity_Layered_uniform(Real *speed_sound, std::vector<Real> wave_c,
+                                int n_vp, size_t Nx, size_t Ny, size_t Nz);
 
 #include "waveInit.tpp"
 #endif
