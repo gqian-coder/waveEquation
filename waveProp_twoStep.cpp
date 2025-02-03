@@ -31,12 +31,14 @@ double potential_energy(T *var_in, T *var_out, std::vector<size_t>dShape)
 
     size_t data_size = R * C * H;
     size_t dim2      = R*C;
-    double average_val = 0.0;
+
+//    double average_val = 0.0;
     std::vector<double> var_diff(data_size);
     for (size_t i=0; i<data_size; i++) {
         var_diff[i]  = (double)var_in[i] - (double)var_out[i];
-        average_val += var_diff[i];
+        //average_val += var_diff[i];
     }
+
     double  PE = 0.0;
     double  ux, uy, uz;
     size_t h_curr, r_curr, k;
@@ -66,7 +68,7 @@ double potential_energy(T *var_in, T *var_out, std::vector<size_t>dShape)
             }
         }
     }
-    std::cout << "averaged data value = " << average_val << "\n";
+    //std::cout << "averaged data value = " << average_val << "\n";
     return PE;
 }
 
@@ -145,9 +147,13 @@ int main(int argc, char **argv) {
     size_t init_ts = std::stoi(argv[cnt_argv++]);
     // output interval
     size_t wt_interval = (size_t)std::stoi(argv[cnt_argv++]);
-    
+    // wave source time
+    bool src_on   = std::stoi(argv[cnt_argv++]);    
+    double src_ts = std::stof(argv[cnt_argv++]);
+
     size_t Nx = (size_t)std::ceil((double)Dx / dh);
     size_t Ny = (size_t)std::ceil((double)Dy / dh);
+    std::vector<size_t> dShape = {Nx, Ny};
 
     std::cout << "simulating a domain of [" << Dx << "/" << Nx << ", " << Dy << "/" << Ny << "], at a spacing of " << dh << "\n";
     std::cout << "simulating " << nframes << " steps at a resolution of " << dt << "\n";
@@ -158,7 +164,6 @@ int main(int argc, char **argv) {
     else if (init_fun==3) std::cout << "solid square\n";
     else if (init_fun==4) std::cout << "gaussian sinusoid waves\n";
     else if (init_fun==5) std::cout << "plane waves \n";
-    else if (init_fun==6) std::cout << "Gaussian pulse\n";
     
     if (obstacle_t==1) std::cout << "emulating multiple disk obstacles\n";
     if (obstacle_t==2) std::cout << "emulating two slits, recommending using plane wave\n";
@@ -174,6 +179,8 @@ int main(int argc, char **argv) {
     std::cout << "\n";
     std::cout << "tolerance = {" << tol_1 << ", " << tol_2 << "} for u_n and u_dt \n";
 
+    if (src_on) std::cout << "turn on a  Gaussian derivative source with a relative ts = " << src_ts << "\n"; 
+    
     adios2::ADIOS ad(MPI_COMM_WORLD);
     adios2::IO writer_io = ad.DeclareIO("Output");
 
@@ -279,8 +286,10 @@ int main(int argc, char **argv) {
             adios2::Engine reader = reader_io.Open(fname, adios2::Mode::ReadRandomAccess);
             adios2::Variable<double> variable;
             if ((tol_1==0) && (tol_2==0) && (init_ts>0)) { // checkpoint restart 
+                // load the checkpoint data compressed using optimized approach 
                 variable = reader_io.InquireVariable<double>("u_dt"); 
             } else {
+                // load the checkpoint data compressed using non-optimized approach
                 variable = reader_io.InquireVariable<double>("u_data");
             }
             std::cout << "total number of steps: " << variable.Steps() << ", read from " << init_ts << " timestep \n";
@@ -322,10 +331,10 @@ int main(int argc, char **argv) {
                 writer.Put<double>(variable_u, waveSim.u_n.data(), adios2::Mode::Sync);
                 writer.PerformPuts();
                 writer.EndStep();
-                writer.BeginStep();
-                writer.Put<double>(variable_u, waveSim.u_np1.data(), adios2::Mode::Sync);
-                writer.PerformPuts();
-                writer.EndStep();
+                //writer.BeginStep();
+                //writer.Put<double>(variable_u, waveSim.u_np1.data(), adios2::Mode::Sync);
+                //writer.PerformPuts();
+                //writer.EndStep();
             }
             break;
         }
@@ -357,9 +366,9 @@ int main(int argc, char **argv) {
             fun_plane_waves<double>(waveSim.u_np1.data(), Nx, Ny, pos_x, 5*max_intensity, freq*T/20.0, n_waves);
             break;
         }
-        case 6: {
-            fun_Gaussian_pulse(waveSim.u_np1.data(), f0, t0, src_intensity, srcx, srcy, (size_t)0, Ny, (size_t)1); 
-        }
+        //case 6: {
+        //    fun_Gaussian_pulse(waveSim.u_np1.data(), f0, t0, src_intensity, srcx, srcy, (size_t)0, Ny, (size_t)1); 
+        //}
         default:
             break; 
     }
@@ -374,13 +383,19 @@ int main(int argc, char **argv) {
     size_t iter_frame = 0;
     while (iter_frame<nframes) {
         if (iter_frame % wt_interval == 0) std::cout << iter_frame << "/" << nframes << "\n";
-        // wave update 
-        waveSim.update_2d(); 
         // source update
-        if (init_fun==6) {
-            waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ((double)iter_frame)*dt-t0, src_intensity);
-            //std::cout << "update pos " << src_pos << ", src = " << waveSim.u_np1[src_pos] << "\n"; 
+        if ((src_on) && (init_fun || iter_frame || ((tol_1*tol_2==0) && (init_ts)>0))) {
+            double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
+            ts += (double)(iter_frame + 1) + src_ts /* secondary c.r. */ + init_ts;
+            t0 = (ts>=3500) ? 4.0 : 0.1;
+            if ((ts<1000) || ((ts>=3500) && (ts<4500))) {
+                waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts*dt-t0, src_intensity);
+                printf("update pos %ld, src[%ld]=%.5e\n",src_pos, (size_t)ts, waveSim.u_np1[src_pos]); 
+            }
         }
+        // wave update
+        waveSim.update_2d();
+
         if (obstacle_t) {
             // apply Dirichlet boundary condition to the scattering on obstacles
             std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), obstacle_m, waveSim.u_np1.begin(), std::multiplies<double>());
@@ -446,9 +461,11 @@ int main(int argc, char **argv) {
                 mgard_x::decompress(compressed_array_cpu, compressed_size_u,
                     decompressed_array_cpu, config, false);
                 writer.Put<double>(variable_u   , (double *)decompressed_array_cpu , adios2::Mode::Sync);
+                double PE = potential_energy(waveSim.u_n.data(), (double *)decompressed_array_cpu, dShape);
+                printf("PE = %.8f, eb / sqrt(PE) = %.8f\n", std::sqrt(PE), tol_1 / std::sqrt(PE));
             } 
             else { // no compression
-                writer.Put<double>(variable_u, waveSim.u_np1.data(), adios2::Mode::Sync);
+                writer.Put<double>(variable_u, waveSim.u_n.data(), adios2::Mode::Sync);
             }
             writer.PerformPuts();
             writer.EndStep();
