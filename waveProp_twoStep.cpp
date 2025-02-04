@@ -128,6 +128,8 @@ int main(int argc, char **argv) {
         std::cout << "Need smaller timestep resolution...\n";
         exit(-1);
     }
+    // distribution of speed of sound: uniform | gaussian
+    std::string material_type(argv[cnt_argv++]);
 
     // dissipation rate
     double gamma   = std::stof(argv[cnt_argv++]); 
@@ -177,6 +179,11 @@ int main(int argc, char **argv) {
     std::cout << "wave speed = ";
     for (int i=0; i<n_vp; i++) std::cout << wave_c[i] << ", ";
     std::cout << "\n";
+    if (!strcmp(material_type.c_str(), "uniform")) {
+        std::cout << "uniform layered materials\n";    
+    } else if (!strcmp(material_type.c_str(), "gaussian")) {
+        std::cout << "simulating a bumpped second material\n";
+    } 
     std::cout << "tolerance = {" << tol_1 << ", " << tol_2 << "} for u_n and u_dt \n";
 
     if (src_on) std::cout << "turn on a  Gaussian derivative source with a relative ts = " << src_ts << "\n"; 
@@ -228,7 +235,16 @@ int main(int argc, char **argv) {
     
     // initialize wave velocity
     std::vector<double> speed_sound(Nx*Ny);
-    velocity_Layered_uniform(speed_sound.data(), wave_c, n_vp, Nx, Ny, 1);
+    if (!strcmp(material_type.c_str(), "uniform")) {
+        velocity_Layered_uniform(speed_sound.data(), wave_c, n_vp, Nx, Ny, 1);
+    } else if (!strcmp(material_type.c_str(), "gaussian")) {
+        std::fill(speed_sound.begin(), speed_sound.end(), wave_c[0]);
+        double peak_h = 0.5;
+        velocity_Gaussian_2d(speed_sound.data(), wave_c[1], peak_h, Nx, Ny);
+    }
+    FILE *fp = fopen("velocity_gaussian.bin", "w");
+    fwrite(speed_sound.data(), sizeof(double), Nx*Ny, fp);
+    fclose(fp);
     std::cout << "velocity = " << *std::max_element(speed_sound.begin(), speed_sound.end()) << "\n";
     waveSim.init_vp(speed_sound.data());
     double *obstacle_m = NULL;
@@ -388,7 +404,7 @@ int main(int argc, char **argv) {
             double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
             ts += (double)(iter_frame + 1) + src_ts /* secondary c.r. */ + init_ts;
             t0 = (ts>=3500) ? 4.0 : 0.1;
-            if ((ts<1000) || ((ts>=3500) && (ts<4500))) {
+            if ((ts<1000) ){ // || ((ts>=3500) && (ts<4500))) {
                 waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts*dt-t0, src_intensity);
                 printf("update pos %ld, src[%ld]=%.5e\n",src_pos, (size_t)ts, waveSim.u_np1[src_pos]); 
             }

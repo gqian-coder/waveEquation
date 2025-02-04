@@ -56,5 +56,8 @@ template <typename Real>
 void velocity_Layered_uniform(Real *speed_sound, std::vector<Real> wave_c,
                                 int n_vp, size_t Nx, size_t Ny, size_t Nz);
 
+template <typename Real>
+void velocity_Gaussian_2d(Real *speed_sound, Real wave_c, Real gaussian_peak, size_t Nx, size_t Ny);
+
 #include "waveInit.tpp"
 #endif

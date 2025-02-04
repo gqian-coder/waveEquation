@@ -25,6 +25,37 @@ void velocity_Layered_uniform(Real *speed_sound, std::vector<Real> wave_c,
     }
 } 
 
+// Dual materials with the underneath layer in a bumped Gaussian shape 
+template <typename Real> 
+void velocity_Gaussian_2d(Real *speed_sound, Real wave_c, Real gaussian_peak, size_t Nx, size_t Ny)
+{   
+    Real mu = 0.0, sigma = 0.25;
+    Real sigma2 = 2 * sigma * sigma;
+    std::vector<Real> x_values(Ny), gaussian_values(Ny);
+    Real step = 1.0 / (Real)(Ny-1);
+    Real temp;
+    gaussian_peak *= Nx;
+    for (size_t i=0; i<Ny; i++) {
+        x_values[i]        = -0.5 + i*step;
+        temp = (x_values[i] - mu);
+        gaussian_values[i] = gaussian_peak * std::exp(-(temp*temp) / sigma2); 
+    }
+    size_t j_end, offset_r;
+    for (size_t i=0; i<Nx; i++) {
+        for (size_t j=0; j<Ny; j++) {
+            if (Nx-i<gaussian_values[j]) {
+                //std::cout << "i = " << i << ", gv[" << j << "] = " << gaussian_values[j] << "\n";
+                j_end = Ny-j+1; 
+                offset_r = i * Ny;
+                for (size_t k=j+offset_r; k<j_end+offset_r; k++) {
+                    speed_sound[k] = wave_c;
+                }
+                break;
+            }
+        }
+    }
+}
+
 // Gaussian pulse point source: ts = time - t0
 template <typename Real> 
 Real src_Gaussian_pulse(Real freq, Real ts, Real A)  
