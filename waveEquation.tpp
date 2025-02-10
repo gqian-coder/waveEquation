@@ -149,203 +149,206 @@ void WaveEquation<Real>::update_3d()
             break;
         }
         case 3: // Periodic cond
-        // r = 0
-        offset_r = Nx * dim1;
-        for (size_t c=1; c<Ny; c++) {
-            offset_c = c * (Nz+1);
-            for (size_t z=1; z<Nz; z++) {
-                k = offset_c + z; 
-                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[offset_r+k] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+        {
+            // r = 0
+            offset_r = Nx * dim1;
+            for (size_t c=1; c<Ny; c++) {
+                offset_c = c * (Nz+1);
+                for (size_t z=1; z<Nz; z++) {
+                    k = offset_c + z; 
+                    u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[offset_r+k] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+                }
             }
-        }
-        // c = 0
-        offset_c = Ny * (Nz+1);
-        for (size_t r=1; r<Nx; r++) {
-            offset_r = r * dim1;
+            // c = 0
+            offset_c = Ny * (Nz+1);
+            for (size_t r=1; r<Nx; r++) {
+                offset_r = r * dim1;
+                for (size_t z=1; z<Nz; z++) {
+                    k = offset_r + z;
+                    u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);   
+                }
+            }
+            // z = 0
+            for (size_t r=1; r<Nx; r++) {
+                offset_r = r * dim1;
+                for (size_t c=1; c<Ny; c++) {
+                    k = offset_r + c*(Nz+1);
+                    u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
+                }
+            }
+            // r = Nx
+            offset_r = Nx * dim1;
+            for (size_t c=1; c<Ny; c++) {
+                offset_c = c * (Nz+1);
+                for (size_t z=1; z<Nz; z++) {
+                    k = offset_r + offset_c + z;
+                    u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[offset_c+z]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+                }
+            }
+            // c = Ny
+            offset_c = Ny * (Nz+1);
+            for (size_t r=1; r<Nx; r++) {
+                offset_r = r * dim1;
+                for (size_t z=1; z<Nz; z++) {
+                    k = offset_r + offset_c + z;
+                    u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[offset_r+z]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+                }
+            }
+            // z = Nz
+            for (size_t r=1; r<Nx; r++) {
+                offset_r = r * dim1;
+                for (size_t c=1; c<Ny; c++) {
+                    k = offset_r + c*(Nz+1) + Nz;
+                    u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
+                }
+            }
+            // r = 0, c = 0 or Ny
+            offset_c = Ny * (Nz+1);
+            offset_r = Nx * dim1;
+            for (size_t z=1; z<Nz; z++) {
+                k = z;
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                           u_n[k+offset_r] + u_n[k+dim1]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+                k += offset_c;
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k+offset_r] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[z]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);   
+            }
+            // r = Nx, c = 0 or Ny
             for (size_t z=1; z<Nz; z++) {
                 k = offset_r + z;
                 u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);   
+                               u_n[k-dim1] + u_n[z]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+                k += offset_c;
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[z]
+                             + u_n[k-Nz-1] + u_n[k-offset_c]
+                             + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+            } 
+            // c = 0, z = 0 or Nz
+            for (size_t r=1; r<Nx; r++) {
+                k = r * dim1;
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
+                k += Nz; 
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
+            } 
+            // c = Ny, z = 0 or Nz
+            for (size_t r=1; r<Nx; r++) {
+                k = r * dim1 + offset_c;
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[k-offset_c]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
+                k += Nz;
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[k-offset_c]
+                             + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
             }
-        }
-        // z = 0
-        for (size_t r=1; r<Nx; r++) {
-            offset_r = r * dim1;
+            // z = 0, r = 0 or Nx
             for (size_t c=1; c<Ny; c++) {
-                k = offset_r + c*(Nz+1);
+                k = c * (Ny+1);
                 u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-            }
-        }
-        // r = Nx
-        offset_r = Nx * dim1;
-        for (size_t c=1; c<Ny; c++) {
-            offset_c = c * (Nz+1);
-            for (size_t z=1; z<Nz; z++) {
-                k = offset_r + offset_c + z;
+                               u_n[k+offset_r] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
+                k += offset_r;
                 u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[offset_c+z]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
+                               u_n[k-dim1] + u_n[k-offset_r]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
             }
-        }
-        // c = Ny
-        offset_c = Ny * (Nz+1);
-        for (size_t r=1; r<Nx; r++) {
-            offset_r = r * dim1;
-            for (size_t z=1; z<Nz; z++) {
-                k = offset_r + offset_c + z;
-                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[offset_r+z]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
-            }
-        }
-        // z = Nz
-        for (size_t r=1; r<Nx; r++) {
-            offset_r = r * dim1;
+            // z = Nz, r = 0 or Nx
             for (size_t c=1; c<Ny; c++) {
-                k = offset_r + c*(Nz+1) + Nz;
+                k = c * (Ny+1) + Nz;
                 u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
+                               u_n[k+offset_r] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
+                k += offset_r;
+                u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k-offset_r]
+                             + u_n[k-Nz-1] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
             }
+            // r=0, c=0, z=0
+            u_np1[0] = 2 * u_n[0] - u_nm1[0] - gamma_t * (u_n[0]-u_nm1[0]) + alpha2[0] * (
+                               u_n[offset_r] + u_n[dim1]
+                             + u_n[offset_c] + u_n[Nz+1]
+                             + u_n[Nz] + u_n[1] - 6*u_n[k]);
+            // r=Nx, c=0, z=0
+            k = offset_r;
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[0]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
+            // r=0, c=Ny, z=0
+            k = offset_c;
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k+offset_r] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[0]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
+            // r=Nx, c=Ny, z=0
+            k = offset_r + offset_c;
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[offset_c]
+                             + u_n[k-Nz-1] + u_n[offset_r]
+                             + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
+            // r=0, c=0, z=Nz
+            k = Nz;
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k+offset_r] + u_n[k+dim1]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[0] - 6*u_n[k]);
+            // r=0, c=Ny, z=Nz
+            k = offset_c+Nz;
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k+offset_r] + u_n[k+dim1]
+                             + u_n[k-Nz-1] + u_n[Nz]
+                             + u_n[k-1] + u_n[offset_c] - 6*u_n[k]);
+            // r=Nx, c=0, z=Nz
+            k = offset_r + Nz;
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[Nz]
+                             + u_n[k+offset_c] + u_n[k+Nz+1]
+                             + u_n[k-1] + u_n[offset_r] - 6*u_n[k]);
+            // r=Nx, c=Ny, z=Nz
+            k = offset_r + offset_c + Nz;
+            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
+                               u_n[k-dim1] + u_n[k-offset_r]
+                             + u_n[k-Nz-1] + u_n[k-offset_c]
+                             + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
+            break;
         }
-        // r = 0, c = 0 or Ny
-        offset_c = Ny * (Nz+1);
-        offset_r = Nx * dim1;
-        for (size_t z=1; z<Nz; z++) {
-            k = z;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k+offset_r] + u_n[k+dim1]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
-            k += offset_c;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k+offset_r] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[z]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);   
-        }
-        // r = Nx, c = 0 or Ny
-        for (size_t z=1; z<Nz; z++) {
-            k = offset_r + z;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[z]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
-            k += offset_c;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[z]
-                         + u_n[k-Nz-1] + u_n[k-offset_c]
-                         + u_n[k-1] + u_n[k+1] - 6*u_n[k]);
-        } 
-        // c = 0, z = 0 or Nz
-        for (size_t r=1; r<Nx; r++) {
-            k = r * dim1;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-            k += Nz; 
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
-        } 
-        // c = Ny, z = 0 or Nz
-        for (size_t r=1; r<Nx; r++) {
-            k = r * dim1 + offset_c;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[k-offset_c]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-            k += Nz;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[k-offset_c]
-                         + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
-        }
-        // z = 0, r = 0 or Nx
-        for (size_t c=1; c<Ny; c++) {
-            k = c * (Ny+1);
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k+offset_r] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-            k += offset_r;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k-offset_r]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-        }
-        // z = Nz, r = 0 or Nx
-        for (size_t c=1; c<Ny; c++) {
-            k = c * (Ny+1) + Nz;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k+offset_r] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
-            k += offset_r;
-            u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
-                           u_n[k-dim1] + u_n[k-offset_r]
-                         + u_n[k-Nz-1] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
-        }
-        // r=0, c=0, z=0
-         u_np1[0] = 2 * u_n[0] - u_nm1[0] - gamma_t * (u_n[0]-u_nm1[0]) + alpha2[0] * (
-                           u_n[offset_r] + u_n[dim1]
-                         + u_n[offset_c] + u_n[Nz+1]
-                         + u_n[Nz] + u_n[1] - 6*u_n[k]);
-        // r=Nx, c=0, z=0
-        k = offset_r;
-        u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
-                           u_n[k-dim1] + u_n[0]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-        // r=0, c=Ny, z=0
-        k = offset_c;
-        u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
-                           u_n[k+offset_r] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[0]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-        // r=Nx, c=Ny, z=0
-        k = offset_r + offset_c;
-        u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
-                           u_n[k-dim1] + u_n[offset_c]
-                         + u_n[k-Nz-1] + u_n[offset_r]
-                         + u_n[k+Nz] + u_n[k+1] - 6*u_n[k]);
-        // r=0, c=0, z=Nz
-        k = Nz;
-        u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
-                           u_n[k+offset_r] + u_n[k+dim1]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[0] - 6*u_n[k]);
-        // r=0, c=Ny, z=Nz
-        k = offset_c+Nz;
-        u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
-                           u_n[k+offset_r] + u_n[k+dim1]
-                         + u_n[k-Nz-1] + u_n[Nz]
-                         + u_n[k-1] + u_n[offset_c] - 6*u_n[k]);
-        // r=Nx, c=0, z=Nz
-        k = offset_r + Nz;
-        u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
-                           u_n[k-dim1] + u_n[Nz]
-                         + u_n[k+offset_c] + u_n[k+Nz+1]
-                         + u_n[k-1] + u_n[offset_r] - 6*u_n[k]);
-        // r=Nx, c=Ny, z=Nz
-        k = offset_r + offset_c + Nz;
-        u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2 * (
-                           u_n[k-dim1] + u_n[k-offset_r]
-                         + u_n[k-Nz-1] + u_n[k-offset_c]
-                         + u_n[k-1] + u_n[k-Nz] - 6*u_n[k]);
         default:
             std::cout << "Invalid boundary condition option!" << std::endl;
     }

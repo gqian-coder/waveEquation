@@ -109,6 +109,7 @@ int main(int argc, char **argv) {
     // simulation space 
     double Dx      = std::stof(argv[cnt_argv++]);
     double Dy      = std::stof(argv[cnt_argv++]);
+    double Dz      = std::stof(argv[cnt_argv++]);
     // simulation spatial resolution
     double dh      = std::stof(argv[cnt_argv++]);
     // simulation temporal resolution
@@ -154,9 +155,10 @@ int main(int argc, char **argv) {
 
     size_t Nx = (size_t)std::ceil((double)Dx / dh);
     size_t Ny = (size_t)std::ceil((double)Dy / dh);
-    std::vector<size_t> dShape = {Nx, Ny};
+    size_t Nz = (size_t)std::ceil((double)Dz / dh);
+    std::vector<size_t> dShape = {Nx, Ny, Nz};
 
-    std::cout << "simulating a domain of [" << Dx << "/" << Nx << ", " << Dy << "/" << Ny << "], at a spacing of " << dh << "\n";
+    std::cout << "simulating a domain of [" << Dx << "/" << Nx << ", " << Dy << "/" << Ny << ", " << Dz << "/" << Nz << "], at a spacing of " << dh << "\n";
     std::cout << "simulating " << nframes << " steps at a resolution of " << dt << "\n";
     std::cout << "initial function: ";
     if (init_fun==0) std::cout << "read from previous simulation steps in the file: " << fname << " at step " << init_ts << "\n";
@@ -194,30 +196,32 @@ int main(int argc, char **argv) {
 
     adios2::Engine writer = writer_io.Open(fname_wt, adios2::Mode::Write);
     adios2::Variable<double> variable_u, variable_u_dt, variable_cr;
-    variable_u  = writer_io.DefineVariable<double>("u_data" , adios2::Dims{Nx, Ny}, adios2::Dims{0,0}, adios2::Dims{Nx, Ny});
+    variable_u  = writer_io.DefineVariable<double>("u_data" , adios2::Dims{Nx, Ny, Nz}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
     std::vector<double> u_dt, u_at;
     if (tol_1>0 || tol_2>0) {
         // compression ratio of u_n and u_n-u_np1
-        variable_cr = writer_io.DefineVariable<double>("u_CR"   , adios2::Dims{2}, adios2::Dims{0}, adios2::Dims{2});
-        variable_u_dt = writer_io.DefineVariable<double>("u_dt", adios2::Dims{Nx, Ny}, adios2::Dims{0,0}, adios2::Dims{Nx, Ny});
-        u_dt.resize(Nx*Ny);
-        u_at.resize(Nx*Ny);
+        variable_cr = writer_io.DefineVariable<double>("u_CR"   , adios2::Dims{3}, adios2::Dims{0}, adios2::Dims{3});
+        variable_u_dt = writer_io.DefineVariable<double>("u_dt", adios2::Dims{Nx, Ny}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
+        u_dt.resize(Nx*Ny*Nz);
+        u_at.resize(Nx*Ny*Nz);
     }
     
+    size_t dim2 = Ny * Nz; 
     double max_intensity = 10.0;
     // for Gaussian wave
     double freq = 2.0 * M_PI / T;
     // for rain drops
     float drop_probability = 1;
     std::vector<double> gauss_template;
-    double NDx = 12, NDy=24;
+    double NDx = 12, NDy=24, NDz=24;
     size_t n_drops = 3;
     // for Gaussian pulse source
     double f0 = 100; // dominant frequency of the source (Hz)
     double t0 = 0.1; // source time shift (s) 
     size_t srcx = size_t(Dx * 0.4 / dh); 
     size_t srcy = size_t(Dy * 0.5 / dh);
-    size_t src_pos = srcx * Ny + srcy;
+    size_t srcz = size_t(Dz * 0.5 / dh);
+    size_t src_pos = srcx * dim2 + srcy*Nz + srcz;
     double src_intensity = 1.0;
     // for compression
     double s1 = 1.0, s2 = 0.0; 
@@ -228,52 +232,48 @@ int main(int argc, char **argv) {
     //config.dev_type = mgard_x::device_type::SERIAL;
     config.dev_type = mgard_x::device_type::CUDA;
     //config.dev_id   = 1;
-    std::vector<mgard_x::SIZE> shape{Nx, Ny};
+    std::vector<mgard_x::SIZE> shape{Nx, Ny, Nz};
     size_t compressed_size_u = 0, compressed_size_dt = 0;
-    double data_bytes = (double) Nx * Ny * sizeof(double);
+    double data_bytes = (double) Nx * Ny * Nz * sizeof(double);
     std::vector<double> compression_ratio(2);
-    WaveEquation <double> waveSim(Nx-1, Ny-1, 0, dt, dh, gamma, cfd_cond); 
+    WaveEquation <double> waveSim(Nx-1, Ny-1, Nz-1, dt, dh, gamma, cfd_cond); 
     
     // initialize wave velocity
-    std::vector<double> speed_sound(Nx*Ny);
+    std::vector<double> speed_sound(Nx*Ny*Nz);
     if (!strcmp(material_type.c_str(), "uniform")) {
-        velocity_Layered_uniform(speed_sound.data(), wave_c, n_vp, Nx, Ny, 1);
+        velocity_Layered_uniform(speed_sound.data(), wave_c, n_vp, Nx, Ny, Nz);
     } else if (!strcmp(material_type.c_str(), "gaussian")) {
         std::fill(speed_sound.begin(), speed_sound.end(), wave_c[0]);
         double peak_h = 0.5;
-        velocity_Gaussian_2d(speed_sound.data(), wave_c[1], peak_h, Nx, Ny);
+        velocity_Gaussian_3d(speed_sound.data(), wave_c[1], peak_h, Nx, Ny, Nz);
     } else if (!strcmp(material_type.c_str(), "sandwich")) {
         std::fill(speed_sound.begin(), speed_sound.end(), wave_c[0]);
-        size_t width_slit = (size_t)(0.04 * (double)Ny);
-        bool flg_v = velocity_sandwich(speed_sound.data(), wave_c[1], width_slit, Nx, Ny, 1);
+        size_t width_slit = (size_t)(0.04 * (double)std::min(Ny, Nz));
+        bool flg_v = velocity_sandwich(speed_sound.data(), wave_c[1], width_slit, Nx, Ny, Nz);
         if (flg_v==false) {
             std::cout << "Fail on creating a sandwich material space\n";
             exit(-1);
         }
     }
-    FILE *fp = fopen("velocity_sandwich.bin", "w");
-    fwrite(speed_sound.data(), sizeof(double), Nx*Ny, fp);
-    fclose(fp);
+    //FILE *fp = fopen("velocity_sandwich_3d.bin", "w");
+    //fwrite(speed_sound.data(), sizeof(double), Nx*Ny*Nz, fp);
+    //fclose(fp);
     std::cout << "velocity = " << *std::max_element(speed_sound.begin(), speed_sound.end()) << "\n";
     waveSim.init_vp(speed_sound.data());
     double *obstacle_m = NULL;
     if (obstacle_t) {
         switch (obstacle_t) {
             case 1: {
-                size_t n_disks    = 10;
-                size_t max_radius = size_t(0.015 * Nx);  
-                std::vector<size_t> x_pos = {311, 383, 221, 19, 272, 235, 571, 477, 430, 457};
-                std::vector<size_t> y_pos = {426, 182, 223, 37, 9, 94, 148, 29, 245, 295};
-                obstacle_m        = emulate_N_disk<double>(Nx, Ny, n_disks, max_radius, x_pos, y_pos);
+                size_t n_rods     = 10;
+                size_t max_radius = size_t(0.015 * std::min(Ny, Nz));  
+                size_t max_height = size_t(0.045 * Nx);
+                obstacle_m        = emulate_N_rods<double>(Nx, Ny, Nz, n_rods, max_radius, max_height);
                 break;
             }
             case 2: {
-                size_t width        = size_t ((1.0/16.0) * Ny);
-                size_t p1           = size_t ((5.0/16.0) * Ny);
-                size_t p2           = size_t ((5.0/8.0 ) * Ny);
-                size_t thickness    = size_t ((1.0/32.0) * Nx);
-                size_t dist_to_edge = size_t ((1.0/5.0) * Nx);
-                obstacle_m = emulate_two_slits<double>(Nx, Ny, p1, p2, width, dist_to_edge, thickness);
+                size_t n_spheres  = 10;
+                size_t max_radius = size_t(0.015 * std::min(Ny, Nz));
+                obstacle_m        = emulate_N_sphere<double>(Nx, Ny, Nz, n_spheres, max_radius);
                 break;
             }
         }
@@ -281,25 +281,33 @@ int main(int argc, char **argv) {
 
     if ((init_fun==1) || (init_fun==2)) {
         // Width of the Gaussian profile for each initial drop.
-        double drop_width = 6;
+        double drop_width = 1;
         // Size of the Gaussian template each drop is based on.
         NDx = (size_t) std::ceil(drop_width / dh);
         NDy = (size_t) std::ceil(drop_width / dh);
+        NDz = (size_t) std::ceil(drop_width / dh);
         size_t cx = (size_t)(NDx/2);
         size_t cy = (size_t)(NDy/2);
-        gauss_template.resize(NDx*NDy);
-        std::vector <double> px(NDx), py(NDy);
+        size_t cz = (size_t)(NDz/2);
+        gauss_template.resize(NDx*NDy*NDz);
+        std::vector <double> px(NDx), py(NDy), pz(NDz);
         for (size_t r=0; r<NDx; r++) {
             px[r] = ((double)r - cx)/drop_width;
         }
         for (size_t c=0; c<NDy; c++) {
             py[c] = (double(c)-cy)/drop_width;
         }
-        std::cout << "rainDrop region: " << NDx << " x " << NDy << " pixels\n";
+        for (size_t z=0; z<NDz; z++) {
+            pz[z] = (double(z)-cz)/drop_width;
+        }
+        std::cout << "rainDrop region: " << NDx << " x " << NDy << " x" << NDz << " pixels\n";
+        size_t radius_pow3 = NDx * NDy * NDz;
         for (size_t r=0; r<NDx; r++) {
             for (size_t c=0; c<NDy; c++) {
-                if ((r-cx)*(r-cx)+(c-cy)*(c-cy) < NDx*NDx) {
-                    gauss_template[r*NDy+c] = max_intensity * exp(-(px[r]*px[r] + py[c]*py[c]));
+                for (size_t z=0; z<NDz; z++) {
+                    if ((r-cx)*(r-cx)+(c-cy)*(c-cy)+(z-cz)*(z-cz) < radius_pow3) {
+                        gauss_template[r*NDy*NDz+c*NDz+z] = max_intensity * exp(-(px[r]*px[r] + py[c]*py[c] + pz[z]*pz[z]));
+                    }
                 }
             }
         }
@@ -318,9 +326,9 @@ int main(int argc, char **argv) {
                 variable = reader_io.InquireVariable<double>("u_data");
             }
             std::cout << "total number of steps: " << variable.Steps() << ", read from " << init_ts << " timestep \n";
-            std::vector<double> init_vpre(Nx*Ny);
-            std::vector<double> init_v(Nx*Ny); 
-            variable.SetSelection({adios2::Dims{0,0}, adios2::Dims{Nx, Ny}});
+            std::vector<double> init_vpre(Nx*Ny*Nz);
+            std::vector<double> init_v(Nx*Ny*Nz); 
+            variable.SetSelection({adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz}});
             variable.SetStepSelection({init_ts, 1}); 
             reader.Get(variable, init_vpre.data());
             reader.PerformGets();
@@ -356,23 +364,19 @@ int main(int argc, char **argv) {
                 writer.Put<double>(variable_u, waveSim.u_n.data(), adios2::Mode::Sync);
                 writer.PerformPuts();
                 writer.EndStep();
-                //writer.BeginStep();
-                //writer.Put<double>(variable_u, waveSim.u_np1.data(), adios2::Mode::Sync);
-                //writer.PerformPuts();
-                //writer.EndStep();
             }
             break;
         }
         case 1: { 
-            fun_rainDrop<double>(waveSim.u_np1.data(), Nx, Ny, 1, NDx, NDy, 1, gauss_template.data(), drop_probability);
+            fun_rainDrop<double>(waveSim.u_np1.data(), Nx, Ny, Nz, NDx, NDy, NDz, gauss_template.data(), drop_probability);
             break;
         }
         case 2: {
-            fun_MultiRainDrop<double>(waveSim.u_np1.data(), Nx, Ny, 1, NDx, NDy, 1, gauss_template.data(), drop_probability, n_drops);
+            fun_MultiRainDrop<double>(waveSim.u_np1.data(), Nx, Ny, NDz, NDx, NDy, NDz, gauss_template.data(), drop_probability, n_drops);
             break;
         }
         case 3: {
-            fun_square<double>(waveSim.u_np1.data(), Nx, Ny, 1, NDx, NDy, 1, max_intensity);
+            fun_square<double>(waveSim.u_np1.data(), Nx, Ny, NDz, NDx, NDy, NDz, max_intensity);
             break;
         }
         case 4: {
@@ -381,19 +385,10 @@ int main(int argc, char **argv) {
             std::vector<double> intensity = {25, 30, 45, 15};
             std::vector<double> freq_x = {freq*T/18.0, freq*T/18.0, freq*T/24.0, freq*T/22.0};
             std::vector<double> freq_y = {freq*T/18.0, freq*T/32.0, freq*T/17.0, freq*T/18.0};
-            std::vector<double> freq_z(n_waves, 0.0);
-            fun_gaussian_wave(waveSim.u_np1.data(), Nx, Ny, 1, intensity, sigma, freq_x, freq_y, freq_z, n_waves);
+            std::vector<double> freq_z = {freq*T/18.0, freq*T/32.0, freq*T/17.0, freq*T/18.0};
+            fun_gaussian_wave(waveSim.u_np1.data(), Nx, Ny, Nz, intensity, sigma, freq_x, freq_y, freq_z, n_waves);
             break;
         }
-        case 5: {
-            size_t n_waves = size_t(0.02 * (double)Nx);
-            size_t pos_x   = size_t(0.3  * (double)Nx); 
-            fun_plane_waves<double>(waveSim.u_np1.data(), Nx, Ny, pos_x, 5*max_intensity, freq*T/20.0, n_waves);
-            break;
-        }
-        //case 6: {
-        //    fun_Gaussian_pulse(waveSim.u_np1.data(), f0, t0, src_intensity, srcx, srcy, (size_t)0, Ny, (size_t)1); 
-        //}
         default:
             break; 
     }
@@ -419,7 +414,7 @@ int main(int argc, char **argv) {
             }
         }
         // wave update
-        waveSim.update_2d();
+        waveSim.update_3d();
 
         if (obstacle_t) {
             // apply Dirichlet boundary condition to the scattering on obstacles
@@ -439,19 +434,19 @@ int main(int argc, char **argv) {
                     std::transform(u_at.begin(), u_at.end(), obstacle_m, u_at.begin(), std::multiplies<double>());
                 }
                 if (strcmp(eb_type.c_str(), "ABS")==0) {
-                    mgard_x::compress(2, mgard_x::data_type::Double, shape, tol_1, s1,
+                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s1,
                         mgard_x::error_bound_type::ABS, u_at.data(),
                         compressed_array_cpu, compressed_size_u, config, false);
                 
-                    mgard_x::compress(2, mgard_x::data_type::Double, shape, tol_2, s2,
+                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_2, s2,
                         mgard_x::error_bound_type::ABS, u_dt.data(),
                         compressed_array2_cpu, compressed_size_dt, config, false);
                 } else {
-                    mgard_x::compress(2, mgard_x::data_type::Double, shape, tol_1, s1,
+                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s1,
                         mgard_x::error_bound_type::REL, u_at.data(),
                         compressed_array_cpu, compressed_size_u, config, false);
 
-                    mgard_x::compress(2, mgard_x::data_type::Double, shape, tol_2, s2,
+                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_2, s2,
                         mgard_x::error_bound_type::REL, u_dt.data(),
                         compressed_array2_cpu, compressed_size_dt, config, false);
                 }
@@ -473,11 +468,11 @@ int main(int argc, char **argv) {
             } else if (tol_1>0 && tol_2==0) {  // non-optimized compression
                 void *compressed_array_cpu  = NULL;
                 if (strcmp(eb_type.c_str(), "ABS")==0) {
-                    mgard_x::compress(2, mgard_x::data_type::Double, shape, tol_1, s2,
+                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s2,
                         mgard_x::error_bound_type::ABS, waveSim.u_n.data(),
                         compressed_array_cpu, compressed_size_u, config, false);
                 } else {
-                    mgard_x::compress(2, mgard_x::data_type::Double, shape, tol_1, s2,
+                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s2,
                         mgard_x::error_bound_type::REL, waveSim.u_n.data(),
                         compressed_array_cpu, compressed_size_u, config, false);
                 }

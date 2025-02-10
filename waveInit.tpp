@@ -15,11 +15,11 @@ void velocity_Layered_uniform(Real *speed_sound, std::vector<Real> wave_c,
         // std::cout << i << ": " << crossLayer[i] << "\n";
     }
     crossLayer[n_vp] = Nx;
-    size_t dim1 = Ny * Nz;
+    size_t dim2 = Ny * Nz;
     size_t hdim, offset_r;
     for (int i=0; i<n_vp; i++) {
-        hdim     = crossLayer[i+1] * dim1; 
-        offset_r = crossLayer[i]   * dim1;
+        hdim     = crossLayer[i+1] * dim2; 
+        offset_r = crossLayer[i]   * dim2;
         // std::cout << hdim << ", " << offset_r << "\n";
         std::fill(speed_sound+offset_r, speed_sound+hdim, wave_c[i]); 
     }
@@ -54,6 +54,73 @@ void velocity_Gaussian_2d(Real *speed_sound, Real wave_c, Real gaussian_peak, si
             }
         }
     }
+}
+
+
+// Dual materials with the underneath layer in a bumped Gaussian shape
+template <typename Real>
+void velocity_Gaussian_3d(Real *speed_sound, Real wave_c, Real gaussian_peak, 
+                            size_t Nx, size_t Ny, size_t Nz)
+{
+    Real mu = 0.0, sigma = 0.25;
+    Real sigma2 = 2 * sigma * sigma;
+    std::vector<Real> x_values(Ny), y_values(Nz), gaussian_values(Nx);
+    Real step_x = 1.0 / (Real)(Ny-1), step_y = 1.0 / (Real)(Nz-1);
+    Real temp_x, temp_y;
+    gaussian_peak *= Nx;
+    size_t dim2 = Ny*Nz;
+    size_t offset_r, offset_c;
+    // generate gaussian values f(x,y) 
+    for (size_t i=0; i<Ny; i++) {
+        x_values[i] = -0.5 + i*step_x;
+        offset_r = i * Nz; 
+        temp_x = (x_values[i] - mu);
+        temp_x = temp_x * temp_x; 
+        for (size_t j=0; j<Nz; j++) {
+            y_values[j] = -0.5 + j*step_y;
+            temp_y = y_values[j] - mu;
+            temp_y = temp_y * temp_y;
+            gaussian_values[offset_r + j] = gaussian_peak * std::exp(-(temp_x + temp_y) / sigma2); 
+        }
+    }
+    // filling the space under surface
+    for (size_t i=0; i<Ny; i++) {
+        offset_c = i*Nz;
+        for (size_t j=0; j<Nz; j++) {
+            for (size_t k=0; k<Nx; k++) {
+                if (Nx-k<=gaussian_values[offset_c+j]) {
+                    speed_sound[k*dim2+offset_c+j] = wave_c;
+                }
+            }
+        }
+    }
+}
+
+
+// sandwich materials with the middle layer different from the sides; divided by x-axis
+template <typename Real>
+bool velocity_sandwich(Real *speed_sound, Real wave_c, size_t width, 
+                        size_t Nx, size_t Ny, size_t Nz)
+{
+    if (Ny <= width) {
+        std::cout << "Need Ny>width to generate a sandwich shaped material space\n";    
+        return false;
+    } 
+    size_t width_z = (Nz>width) ? width : 1;
+    size_t dim1    = Ny * Nz;
+    size_t offset_c, offset_r;
+    size_t mid_c   = (size_t)(0.5 * (double)(Ny - width)); 
+    size_t mid_z   = (Nz>width) ? (size_t)(0.5 * (double)(Nz - width)) : (Nz>2 ? (size_t)(0.5*(double)(Nz-1)):0);
+    for (size_t r=0; r<Nx; r++) {
+        offset_r = r *dim1;
+        for (size_t c=mid_c; c<width+mid_c; c++) {
+            offset_c = offset_r + c * Nz;
+            for (size_t z=mid_z; z<width_z+mid_z; z++) {
+                speed_sound[offset_c+z] = wave_c;
+            }
+        }
+    }
+    return true;
 }
 
 // Gaussian pulse point source: ts = time - t0
