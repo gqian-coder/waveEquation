@@ -4,6 +4,14 @@
 #include <iostream>
 #include <vector>
 
+// import velocity from a mask
+template <typename Real>
+void velocity_mask(Real *speed_sound, Real *mask, size_t Nx, size_t Ny, size_t Nz)
+{
+    size_t cnt_data = Nx*Ny*Nz;
+    std::copy(mask, mask + cnt_data, speed_sound);
+}
+
 // wave velocity across domain, separating along x-axis, 1/n_vp fraction
 template <typename Real>
 void velocity_Layered_uniform(Real *speed_sound, std::vector<Real> wave_c, 

@@ -66,5 +66,10 @@ void velocity_Gaussian_3d(Real *speed_sound, Real wave_c, Real gaussian_peak,
 template <typename Real>
 bool velocity_sandwich(Real *speed_sound, Real wave_c, size_t width,
                         size_t Nx, size_t Ny, size_t Nz);
+
+// import velocity from a mask
+template <typename Real>
+void velocity_mask(Real *speed_sound, Real *mask, size_t Nx, size_t Ny, size_t Nz);
+
 #include "waveInit.tpp"
 #endif

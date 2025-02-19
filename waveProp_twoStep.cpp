@@ -111,18 +111,34 @@ int main(int argc, char **argv) {
     double Dy      = std::stof(argv[cnt_argv++]);
     // simulation spatial resolution
     double dh      = std::stof(argv[cnt_argv++]);
+
+    size_t Nx = (size_t)std::ceil((double)Dx / dh);
+    size_t Ny = (size_t)std::ceil((double)Dy / dh);
+
     // simulation temporal resolution
     double dt      = std::stof(argv[cnt_argv++]);
     // number of simulation frames
     float T        = std::stof(argv[cnt_argv++]);
     // wave speed
     int n_vp       = std::stoi(argv[cnt_argv++]);
-    std::vector<double> wave_c(n_vp);
-    for (int i=0; i<n_vp; i++) {
-        wave_c[i] = std::stof(argv[cnt_argv++]);
+    std::vector<double> wave_c;
+    if (n_vp > 0) {
+        for (int i=0; i<n_vp; i++) {
+            wave_c.push_back(std::stof(argv[cnt_argv++]));
+        }
+    } else {
+        wave_c.resize(Nx*Ny); 
+        std::string v_fname(argv[cnt_argv++]);
+        FILE *fp = fopen(v_fname.c_str(), "r");
+        if (fp == NULL) {
+            std::cout << "Error openning velocity mask file\n";
+            return -1;
+        }  
+        fread(wave_c.data(), sizeof(double), Nx*Ny, fp);
+        fclose(fp);
     }
     double vp_max = *std::max_element(wave_c.begin(), wave_c.end());
-    std::cout << "recommended timestep resolution = " << dh/vp_max/std::sqrt(2) << "\n";
+    std::cout << "recommended timestep resolution = " << dh/vp_max/std::sqrt(2) << " based on vp_max = " << vp_max << "\n";
     if (dt >= dh/vp_max/std::sqrt(2)) {
         std::cout << "Need smaller timestep resolution...\n";
         exit(-1);
@@ -152,10 +168,6 @@ int main(int argc, char **argv) {
     bool src_on   = std::stoi(argv[cnt_argv++]);    
     double src_ts = std::stof(argv[cnt_argv++]);
 
-    size_t Nx = (size_t)std::ceil((double)Dx / dh);
-    size_t Ny = (size_t)std::ceil((double)Dy / dh);
-    std::vector<size_t> dShape = {Nx, Ny};
-
     std::cout << "simulating a domain of [" << Dx << "/" << Nx << ", " << Dy << "/" << Ny << "], at a spacing of " << dh << "\n";
     std::cout << "simulating " << nframes << " steps at a resolution of " << dt << "\n";
     std::cout << "initial function: ";
@@ -165,6 +177,7 @@ int main(int argc, char **argv) {
     else if (init_fun==3) std::cout << "solid square\n";
     else if (init_fun==4) std::cout << "gaussian sinusoid waves\n";
     else if (init_fun==5) std::cout << "plane waves \n";
+    else if (init_fun==6) std::cout << "gaussian pulse source\n";
     
     if (obstacle_t==1) std::cout << "emulating multiple disk obstacles\n";
     if (obstacle_t==2) std::cout << "emulating two slits, recommending using plane wave\n";
@@ -250,10 +263,13 @@ int main(int argc, char **argv) {
             std::cout << "Fail on creating a sandwich material space\n";
             exit(-1);
         }
-    }
-    FILE *fp = fopen("velocity_sandwich.bin", "w");
-    fwrite(speed_sound.data(), sizeof(double), Nx*Ny, fp);
-    fclose(fp);
+    } else if (!strcmp(material_type.c_str(), "mask")) {
+        velocity_mask(speed_sound.data(), wave_c.data(), Nx, Ny, 1);
+    }      
+    
+    //FILE *fp = fopen("velocity_sandwich.bin", "w");
+    //fwrite(speed_sound.data(), sizeof(double), Nx*Ny, fp);
+    //fclose(fp);
     std::cout << "velocity = " << *std::max_element(speed_sound.begin(), speed_sound.end()) << "\n";
     waveSim.init_vp(speed_sound.data());
     double *obstacle_m = NULL;
@@ -486,8 +502,9 @@ int main(int argc, char **argv) {
                 mgard_x::decompress(compressed_array_cpu, compressed_size_u,
                     decompressed_array_cpu, config, false);
                 writer.Put<double>(variable_u   , (double *)decompressed_array_cpu , adios2::Mode::Sync);
-                double PE = potential_energy(waveSim.u_n.data(), (double *)decompressed_array_cpu, dShape);
-                printf("PE = %.8f, eb / sqrt(PE) = %.8f\n", std::sqrt(PE), tol_1 / std::sqrt(PE));
+                //std::vector<size_t> dShape = {Nx, Ny};
+                //double PE = potential_energy(waveSim.u_n.data(), (double *)decompressed_array_cpu, dShape);
+                //printf("PE = %.8f, eb / sqrt(PE) = %.8f\n", std::sqrt(PE), tol_1 / std::sqrt(PE));
             } 
             else { // no compression
                 writer.Put<double>(variable_u, waveSim.u_n.data(), adios2::Mode::Sync);
