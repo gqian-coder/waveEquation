@@ -11,17 +11,19 @@
 
 #include "adios2.h"
 
-double calc_KE(double *u_prev, double *u, double *velocity, double dt, size_t num_data)
+// kinetic energy
+double calc_KE(double *u_prev, double *u, double *v2, double dt, size_t num_data)
 {
     double diff_t, KE = 0.0;
     double dt2 = dt*dt;
     for (size_t i=0; i<num_data; i++) {
         diff_t = (u[i] - u_prev[i]);
-        KE += diff_t * diff_t / dt2 / velocity[i];
+        KE += diff_t * diff_t / dt2 / v2[i];
     }
     return KE * 0.5;
 }
 
+// potential energy
 double calc_PE(double *u, double dh, size_t Nx, size_t Ny)
 {
     double PE = 0.0;
@@ -30,15 +32,16 @@ double calc_PE(double *u, double dh, size_t Nx, size_t Ny)
     for (size_t r=1; r<Nx; r++) {
         r_curr = r * Ny;
         for (size_t c=1; c<Ny; c++) {
-            k   = r_curr + c;
-            ux  = (u[k] - u[k-Ny])/dh;
-            uy  = (u[k] - u[k-1])/dh;
+            k  = r_curr + c;
+            ux = (u[k] - u[k-Ny]) / dh;
+            uy = (u[k] - u[k-1])/dh;
             PE += ux*ux + uy*uy;
         }
     }
-    return PE * 0.5; 
+    return PE * 0.5;
 }
 
+// root-of-mean-square error
 double calc_rmse(double *data_f, double *data_g, double *diff, size_t num_data)
 {
     double rmse = 0.0;
@@ -69,6 +72,7 @@ int main(int argc, char **argv) {
     size_t init_ts = std::stoi(argv[cnt_argv++]);    
     std::string fname_err(argv[cnt_argv++]);
     size_t total_Steps = std::stoi(argv[cnt_argv++]);
+    bool total_Energy  = bool(std::stoi(argv[cnt_argv++]));
 
     std::cout << "original file: " << fname_f.c_str() << "\n";
     std::cout << "c.r. file: " << fname_g.c_str() << "\n";
@@ -89,6 +93,8 @@ int main(int argc, char **argv) {
     size_t available_Steps = std::min(variable_g.Steps(), variable_f.Steps() - init_ts); 
     if (total_Steps>0) {
         total_Steps = std::min(total_Steps, available_Steps); 
+    } else {
+        total_Steps = available_Steps;
     }
     std::cout << "total number of steps: " << variable_f.Steps() << ", read from " << init_ts << " to " << total_Steps << " timestep \n";
     reader_g.Close();
@@ -100,10 +106,13 @@ int main(int argc, char **argv) {
     std::vector<double> var_g(num_data);
     // difference data
     std::vector<double> var_e(num_data);
-    std::vector<double> var_prev(num_data);
+    std::vector<double> var_prevE(num_data);
+    std::vector<double> var_prevF(num_data);
     std::vector<double> rmse(total_Steps);
     std::vector<double> PE_e(total_Steps);
     std::vector<double> KE_e(total_Steps);
+    std::vector<double> KE_f(total_Steps);
+    std::vector<double> PE_f(total_Steps);
 
     std::vector<double> wave_c(num_data);
     if (strcmp(fname_v.c_str(), "NaN")==0) {
@@ -117,6 +126,7 @@ int main(int argc, char **argv) {
         fread(wave_c.data(), sizeof(double), num_data, fp);
         fclose(fp);
     }
+    std::transform(wave_c.begin(), wave_c.end(), wave_c.begin(), [](double value) { return value * value; }); 
 
     size_t cnt = 0;
     while (true) {
@@ -138,10 +148,17 @@ int main(int argc, char **argv) {
          
         rmse[cnt] = calc_rmse(var_f.data(), var_g.data(), var_e.data(), num_data);
         if (cnt>0) {
-            KE_e[cnt] = calc_KE(var_prev.data(), var_e.data(), wave_c.data(), dt, num_data);
+            KE_e[cnt] = calc_KE(var_prevE.data(), var_e.data(), wave_c.data(), dt, num_data);
+            if (total_Energy) {
+                KE_f[cnt] = calc_KE(var_prevF.data(), var_f.data(), wave_c.data(), dt, num_data);
+            }
         }
         PE_e[cnt] = calc_PE(var_e.data(), dh, shape[0], shape[1]);
-        std::copy(var_e.begin(), var_e.end(), var_prev.begin());
+        if (total_Energy) {
+            PE_f[cnt] = calc_PE(var_f.data(), dh, shape[0], shape[1]);
+        }
+        std::copy(var_e.begin(), var_e.end(), var_prevE.begin());
+        std::copy(var_f.begin(), var_f.end(), var_prevF.begin());
         reader_g.EndStep(); 
         if (cnt % 500 == 0) std::cout << cnt << " / " << init_ts+cnt << "\n"; 
         cnt ++;
@@ -151,19 +168,29 @@ int main(int argc, char **argv) {
     reader_g.Close();
     
     FILE *fp = fopen((fname_err+"_l2.bin").c_str(), "w");
-    fwrite(rmse.data(), sizeof(double), num_data, fp);
+    fwrite(rmse.data(), sizeof(double), total_Steps, fp);
     fclose(fp);
     
     fp = fopen((fname_err+"_KE_e.bin").c_str(), "w");
-    fwrite(KE_e.data(), sizeof(double), num_data, fp);
+    fwrite(KE_e.data(), sizeof(double), total_Steps, fp);
     fclose(fp);
 
     fp = fopen((fname_err+"_PE_e.bin").c_str(), "w");
-    fwrite(PE_e.data(), sizeof(double), num_data, fp);
+    fwrite(PE_e.data(), sizeof(double), total_Steps, fp);
     fclose(fp);
 
+    if (total_Energy) {
+        fp = fopen((fname_err+"_KE_f.bin").c_str(), "w");
+        fwrite(KE_f.data(), sizeof(double), total_Steps, fp);
+        fclose(fp);
+
+        fp = fopen((fname_err+"_PE_f.bin").c_str(), "w");
+        fwrite(PE_f.data(), sizeof(double), total_Steps, fp);
+        fclose(fp);
+    }
+
     for (size_t i=0; i<500; i++) {
-        std::cout << i << ": l2 = " << rmse[i] << ", KE_e = " << KE_e[i] << ", PE_e = " << PE_e[i] << "\n";
+        std::cout << i << ": l2 = " << rmse[i] << ", KE_e = " << KE_e[i] << ", KE_f = " << KE_f[i] << ", PE_e = " << PE_e[i] << ", PE_f = " << PE_f[i] << "\n";
     }
     return 0;
 }
