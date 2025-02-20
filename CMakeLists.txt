@@ -21,6 +21,9 @@ target_link_libraries(waveProp_twoStep adios2::adios2 MPI::MPI_C mgard::mgard)
 add_executable(waveProp_twoStep_3d waveProp_twoStep_3d.cpp waveEquation.tpp waveInit.tpp obstacle.tpp)
 target_link_libraries(waveProp_twoStep_3d adios2::adios2 MPI::MPI_C mgard::mgard)
 
+add_executable(waveEnergy waveEnergy.cpp)
+target_link_libraries(waveEnergy adios2::adios2 MPI::MPI_C)
+
 #add_executable(waveProp_twoStep_m1 waveProp_twoStep_m1.cpp waveEquation.tpp waveInit.tpp obstacle.tpp)
 #target_link_libraries(waveProp_twoStep_m1 adios2::adios2 MPI::MPI_C mgard::mgard)
 
