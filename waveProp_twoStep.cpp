@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
         fclose(fp);
     }
     double vp_max = *std::max_element(wave_c.begin(), wave_c.end());
-    std::cout << "recommended timestep resolution = " << dh/vp_max/std::sqrt(2) << " based on vp_max = " << vp_max << "\n";
+    std::cout << "recommended timestep resolution < " << dh/vp_max/std::sqrt(2) << " based on vp_max = " << vp_max << "\n";
     if (dt >= dh/vp_max/std::sqrt(2)) {
         std::cout << "Need smaller timestep resolution...\n";
         exit(-1);
@@ -179,9 +179,13 @@ int main(int argc, char **argv) {
     else if (init_fun==5) std::cout << "plane waves \n";
     else if (init_fun==6) std::cout << "gaussian pulse source\n";
     
-    if (obstacle_t==1) std::cout << "emulating multiple disk obstacles\n";
-    if (obstacle_t==2) std::cout << "emulating two slits, recommending using plane wave\n";
-    else std::cout << "no obstacle\n";
+    if (obstacle_t==1) {
+        std::cout << "emulating multiple disk obstacles\n";
+    }   else if (obstacle_t==2) {
+        std::cout << "emulating two slits, recommending using plane wave\n";
+    }   else {
+        std::cout << "no obstacle\n";
+    }
  
     std::cout << "simulating boundary condiction: ";
     if (cfd_cond==1) std::cout << "Dirichlet\n";
@@ -276,7 +280,7 @@ int main(int argc, char **argv) {
     if (obstacle_t) {
         switch (obstacle_t) {
             case 1: {
-                size_t n_disks    = 10;
+                size_t n_disks    = 8;
                 size_t max_radius = size_t(0.015 * Nx);  
                 std::vector<size_t> x_pos = {311, 383, 221, 19, 272, 235, 571, 477, 430, 457};
                 std::vector<size_t> y_pos = {426, 182, 223, 37, 9, 94, 148, 29, 245, 295};
@@ -341,6 +345,8 @@ int main(int argc, char **argv) {
             reader.Get(variable, init_vpre.data());
             reader.PerformGets();
             std::cout << "u_prev: min/max = " << *std::min_element(init_vpre.begin(), init_vpre.end()) << ", " << *std::max_element(init_vpre.begin(), init_vpre.end()) << "\n";
+            std::cout << "Previous step " << init_ts << ", now at step " << reader.CurrentStep() << "\n";
+
             std::cout << "begin to load the current step...\n";
             if ((init_ts>0)  && (tol_1==0) && (tol_2==0)) {  
                 std::cout << "read u_dt\n";

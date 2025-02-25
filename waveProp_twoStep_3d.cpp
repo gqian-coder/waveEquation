@@ -112,23 +112,40 @@ int main(int argc, char **argv) {
     double Dz      = std::stof(argv[cnt_argv++]);
     // simulation spatial resolution
     double dh      = std::stof(argv[cnt_argv++]);
+
+    size_t Nx = (size_t)std::ceil((double)Dx / dh);
+    size_t Ny = (size_t)std::ceil((double)Dy / dh);
+    size_t Nz = (size_t)std::ceil((double)Dz / dh);
+
     // simulation temporal resolution
     double dt      = std::stof(argv[cnt_argv++]);
     // number of simulation frames
     float T        = std::stof(argv[cnt_argv++]);
     // wave speed
     int n_vp       = std::stoi(argv[cnt_argv++]);
-    std::vector<double> wave_c(n_vp);
-    for (int i=0; i<n_vp; i++) {
-        wave_c[i] = std::stof(argv[cnt_argv++]);
+    std::vector<double> wave_c;
+    if (n_vp > 0) {
+        for (int i=0; i<n_vp; i++) {
+            wave_c.push_back(std::stof(argv[cnt_argv++]));
+        }
+    } else {
+        wave_c.resize(Nx*Ny*Nz);
+        std::string v_fname(argv[cnt_argv++]);
+        FILE *fp = fopen(v_fname.c_str(), "r");
+        if (fp == NULL) {
+            std::cout << "Error openning velocity mask file\n";
+            return -1;
+        }
+        fread(wave_c.data(), sizeof(double), Nx*Ny*Nz, fp);
+        fclose(fp);
     }
     double vp_max = *std::max_element(wave_c.begin(), wave_c.end());
-    std::cout << "recommended timestep resolution = " << dh/vp_max/std::sqrt(2) << "\n";
+    std::cout << "recommended timestep resolution < " << dh/vp_max/std::sqrt(2) << "\n";
     if (dt >= dh/vp_max/std::sqrt(2)) {
         std::cout << "Need smaller timestep resolution...\n";
         exit(-1);
     }
-    // distribution of speed of sound: uniform | gaussian
+    // distribution of speed of sound: uniform | gaussian | mask
     std::string material_type(argv[cnt_argv++]);
 
     // dissipation rate
@@ -153,9 +170,6 @@ int main(int argc, char **argv) {
     bool src_on   = std::stoi(argv[cnt_argv++]);    
     double src_ts = std::stof(argv[cnt_argv++]);
 
-    size_t Nx = (size_t)std::ceil((double)Dx / dh);
-    size_t Ny = (size_t)std::ceil((double)Dy / dh);
-    size_t Nz = (size_t)std::ceil((double)Dz / dh);
     std::vector<size_t> dShape = {Nx, Ny, Nz};
 
     std::cout << "simulating a domain of [" << Dx << "/" << Nx << ", " << Dy << "/" << Ny << ", " << Dz << "/" << Nz << "], at a spacing of " << dh << "\n";
@@ -186,6 +200,8 @@ int main(int argc, char **argv) {
         std::cout << "simulating a bumpped second material\n";
     } else if (!strcmp(material_type.c_str(), "sandwich")) {
         std::cout << "simulating a sandwich material space w/ the middle layer different from the sides\n";
+    } else if (!strcmp(material_type.c_str(), "mask")) {
+        std::cout << "simulating material space using mask data\n"; 
     }
     std::cout << "tolerance = {" << tol_1 << ", " << tol_2 << "} for u_n and u_dt \n";
 
@@ -201,7 +217,7 @@ int main(int argc, char **argv) {
     if (tol_1>0 || tol_2>0) {
         // compression ratio of u_n and u_n-u_np1
         variable_cr = writer_io.DefineVariable<double>("u_CR"   , adios2::Dims{3}, adios2::Dims{0}, adios2::Dims{3});
-        variable_u_dt = writer_io.DefineVariable<double>("u_dt", adios2::Dims{Nx, Ny}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
+        variable_u_dt = writer_io.DefineVariable<double>("u_dt", adios2::Dims{Nx, Ny, Nz}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
         u_dt.resize(Nx*Ny*Nz);
         u_at.resize(Nx*Ny*Nz);
     }
@@ -214,15 +230,15 @@ int main(int argc, char **argv) {
     float drop_probability = 1;
     std::vector<double> gauss_template;
     double NDx = 12, NDy=24, NDz=24;
-    size_t n_drops = 3;
+    size_t n_drops = 6;
     // for Gaussian pulse source
     double f0 = 100; // dominant frequency of the source (Hz)
-    double t0 = 0.1; // source time shift (s) 
+    double t0 = 1; // source time shift (s) 
     size_t srcx = size_t(Dx * 0.4 / dh); 
     size_t srcy = size_t(Dy * 0.5 / dh);
     size_t srcz = size_t(Dz * 0.5 / dh);
     size_t src_pos = srcx * dim2 + srcy*Nz + srcz;
-    double src_intensity = 1.0;
+    double src_intensity = 50.0;
     // for compression
     double s1 = 1.0, s2 = 0.0; 
 
@@ -254,6 +270,8 @@ int main(int argc, char **argv) {
             std::cout << "Fail on creating a sandwich material space\n";
             exit(-1);
         }
+    } else if (!strcmp(material_type.c_str(), "mask")) {
+        velocity_mask(speed_sound.data(), wave_c.data(), Nx, Ny, Nz);
     }
     //FILE *fp = fopen("velocity_sandwich_3d.bin", "w");
     //fwrite(speed_sound.data(), sizeof(double), Nx*Ny*Nz, fp);
@@ -281,7 +299,7 @@ int main(int argc, char **argv) {
 
     if ((init_fun==1) || (init_fun==2)) {
         // Width of the Gaussian profile for each initial drop.
-        double drop_width = 1;
+        double drop_width = 6;
         // Size of the Gaussian template each drop is based on.
         NDx = (size_t) std::ceil(drop_width / dh);
         NDy = (size_t) std::ceil(drop_width / dh);
@@ -372,7 +390,7 @@ int main(int argc, char **argv) {
             break;
         }
         case 2: {
-            fun_MultiRainDrop<double>(waveSim.u_np1.data(), Nx, Ny, NDz, NDx, NDy, NDz, gauss_template.data(), drop_probability, n_drops);
+            fun_MultiRainDrop<double>(waveSim.u_np1.data(), Nx, Ny, Nz, NDx, NDy, NDz, gauss_template.data(), drop_probability, n_drops);
             break;
         }
         case 3: {
@@ -402,7 +420,7 @@ int main(int argc, char **argv) {
     drop_probability  = 0.01; 
     size_t iter_frame = 0;
     while (iter_frame<nframes) {
-        if (iter_frame % wt_interval == 0) std::cout << iter_frame << "/" << nframes << "\n";
+        std::cout << iter_frame << "/" << nframes << "\n";
         // source update
         if ((src_on) && (init_fun || iter_frame || ((tol_1*tol_2==0) && (init_ts)>0))) {
             double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
@@ -410,7 +428,7 @@ int main(int argc, char **argv) {
             t0 = (ts>=3500) ? 4.0 : 0.1;
             if ((ts<1000) ){ // || ((ts>=3500) && (ts<4500))) {
                 waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts*dt-t0, src_intensity);
-                printf("update pos %ld, src[%ld]=%.5e\n",src_pos, (size_t)ts, waveSim.u_np1[src_pos]); 
+                printf("update pos [%ld, %ld, %ld], src[%ld]=%.5e\n",srcx, srcy, srcz, (size_t)ts, waveSim.u_np1[src_pos]); 
             }
         }
         // wave update

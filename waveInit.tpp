@@ -349,7 +349,7 @@ void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t Nz,
             size_t x = static_cast<size_t>(random_x * (Nx-cx-1) + cx);
             size_t y = static_cast<size_t>(random_y * (Ny-cy-1) + cy);
             size_t z = static_cast<size_t>(random_z * (Nz-cz-1) + cz);
-            std::cout << "x, y, z = " << x << ", " << y  << ", "<< cx << ", " << cy << ", " << cz << ", " << NDx << ", " << NDy << ", " << NDz << Nx << ", " << Ny<< ", " << Nz << "\n";
+            std::cout << "x, y, z = " << x << ", " << y  << ", "<< z << ", " << cx << ", " << cy << ", " << cz << ", " << NDx << ", " << NDy << ", " << NDz << Nx << ", " << Ny<< ", " << Nz << "\n";
             size_t dim1  = Ny * Nz;
             size_t dimD1 = NDy * NDz;
             size_t offset_x, offset_y, k;
