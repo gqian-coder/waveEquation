@@ -246,7 +246,7 @@ int main(int argc, char **argv) {
     mgard_x::Config config;
     config.lossless = mgard_x::lossless_type::Huffman_Zstd;
     //config.dev_type = mgard_x::device_type::SERIAL;
-    config.dev_type = mgard_x::device_type::CUDA;
+    //config.dev_type = mgard_x::device_type::CUDA;
     //config.dev_id   = 1;
     std::vector<mgard_x::SIZE> shape{Nx, Ny, Nz};
     size_t compressed_size_u = 0, compressed_size_dt = 0;
