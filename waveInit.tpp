@@ -338,9 +338,11 @@ void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t Nz,
     size_t cz = (size_t)(NDz/2);
     std::random_device rd;  // Non-deterministic random device (for seeding)
     std::mt19937 gen(rd()); // Mersenne Twister pseudo-random generator
-    std::uniform_real_distribution<> dis(0.0, 1.0);
+    double noRainZone = 0.2;
+    std::uniform_real_distribution<> dis(0.0+noRainZone, 1.0-noRainZone);
     float random_number = dis(gen);
     //std::cout << "probability: " << random_number << "\n";
+    // try not to generate rain drops closing to edges
     for (size_t d=0; d<nDrops; d++) {
         if (random_number < drop_probability) {
             float random_x = dis(gen);
@@ -349,7 +351,7 @@ void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t Nz,
             size_t x = static_cast<size_t>(random_x * (Nx-cx-1) + cx);
             size_t y = static_cast<size_t>(random_y * (Ny-cy-1) + cy);
             size_t z = static_cast<size_t>(random_z * (Nz-cz-1) + cz);
-            std::cout << "x, y, z = " << x << ", " << y  << ", "<< z << ", " << cx << ", " << cy << ", " << cz << ", " << NDx << ", " << NDy << ", " << NDz << Nx << ", " << Ny<< ", " << Nz << "\n";
+            std::cout << "x, y, z = " << x << ", " << y  << ", "<< z << ", " << cx << ", " << cy << ", " << cz << ", " << NDx << ", " << NDy << ", " << NDz << ", " << Nx << ", " << Ny<< ", " << Nz << "\n";
             size_t dim1  = Ny * Nz;
             size_t dimD1 = NDy * NDz;
             size_t offset_x, offset_y, k;

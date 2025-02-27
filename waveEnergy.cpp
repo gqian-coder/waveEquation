@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
         std::copy(var_e.begin(), var_e.end(), var_prevE.begin());
         std::copy(var_f.begin(), var_f.end(), var_prevF.begin());
         reader_g.EndStep(); 
-        if (cnt % 500 == 0) std::cout << cnt << " / " << init_ts+cnt << "\n"; 
+        if (cnt % 5 == 0) std::cout << cnt << " / " << init_ts+cnt << ", l2 = " << rmse[cnt] << ", PE = " << PE_e[cnt] << ", KE = " << KE_e[cnt] <<"\n"; 
         cnt ++;
         if (cnt == total_Steps) break;
     }
@@ -189,7 +189,8 @@ int main(int argc, char **argv) {
         fclose(fp);
     }
 
-    for (size_t i=0; i<500; i++) {
+    size_t n_print = std::min((int)cnt, 500);
+    for (size_t i=0; i<n_print; i++) {
         std::cout << i << ": l2 = " << rmse[i] << ", KE_e = " << KE_e[i] << ", KE_f = " << KE_f[i] << ", PE_e = " << PE_e[i] << ", PE_f = " << PE_f[i] << "\n";
     }
     return 0;
