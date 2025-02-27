@@ -167,6 +167,8 @@ int main(int argc, char **argv) {
     // wave source time
     bool src_on   = std::stoi(argv[cnt_argv++]);    
     double src_ts = std::stof(argv[cnt_argv++]);
+    // to write out data after cr_ts
+    size_t cr_ts  = std::stoi(argv[cnt_argv++]);
 
     std::cout << "simulating a domain of [" << Dx << "/" << Nx << ", " << Dy << "/" << Ny << "], at a spacing of " << dh << "\n";
     std::cout << "simulating " << nframes << " steps at a resolution of " << dt << "\n";
@@ -228,11 +230,11 @@ int main(int argc, char **argv) {
     float drop_probability = 1;
     std::vector<double> gauss_template;
     double NDx = 12, NDy=24;
-    size_t n_drops = 3;
+    size_t n_drops = 4;
     // for Gaussian pulse source
     double f0 = 100; // dominant frequency of the source (Hz)
     double t0 = 0.1; // source time shift (s) 
-    size_t srcx = size_t(Dx * 0.4 / dh); 
+    size_t srcx = size_t(Dx * 0.5 / dh); 
     size_t srcy = size_t(Dy * 0.5 / dh);
     size_t src_pos = srcx * Ny + srcy;
     double src_intensity = 1.0;
@@ -330,11 +332,13 @@ int main(int argc, char **argv) {
             reader_io.SetEngine("BP");
             adios2::Engine reader = reader_io.Open(fname, adios2::Mode::ReadRandomAccess);
             adios2::Variable<double> variable;
-            if ((tol_1==0) && (tol_2==0) && (init_ts>0)) { // checkpoint restart 
+            if ((tol_1==0) && (tol_2==0) && (init_ts>0)) { // optimized checkpoint restart 
                 // load the checkpoint data compressed using optimized approach 
+                std::cout << "load u_dt\n";
                 variable = reader_io.InquireVariable<double>("u_dt"); 
             } else {
                 // load the checkpoint data compressed using non-optimized approach
+                std::cout << "load u_{n}\n";
                 variable = reader_io.InquireVariable<double>("u_data");
             }
             std::cout << "total number of steps: " << variable.Steps() << ", read from " << init_ts << " timestep \n";
@@ -349,7 +353,7 @@ int main(int argc, char **argv) {
 
             std::cout << "begin to load the current step...\n";
             if ((init_ts>0)  && (tol_1==0) && (tol_2==0)) {  
-                std::cout << "read u_dt\n";
+                std::cout << "read u_at\n";
                 variable = reader_io.InquireVariable<double>("u_data");
                 variable.SetStepSelection({init_ts, 1});
             } else {
@@ -359,7 +363,7 @@ int main(int argc, char **argv) {
             reader.Get(variable, init_v.data());
             reader.PerformGets();
             std::cout <<  "u_curr: min/max = " << *std::min_element(init_v.begin(), init_v.end()) << ", " << *std::max_element(init_v.begin(), init_v.end()) << "\n";
-            if ((init_ts>0) && (tol_1==0) && (tol_2==0)) {  // change u_n - u_nm1 and (u_n+u_nm1)/2 to u_n and u_mn1
+            if ((init_ts>0) && (tol_1==0) && (tol_2==0)) {  // change (u_n - u_nm1)/2 and (u_n+u_nm1)/2 to u_n and u_mn1
                 std::transform(init_vpre.begin(), init_vpre.end(), init_vpre.begin(), [](double num) { return num / 2.0; });
                 std::vector<double> u_A(init_v);
                 // u_n = u_A + 0.5*u_dt
@@ -434,8 +438,8 @@ int main(int argc, char **argv) {
         if ((src_on) && (init_fun || iter_frame || ((tol_1*tol_2==0) && (init_ts)>0))) {
             double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
             ts += (double)(iter_frame + 1) + src_ts /* secondary c.r. */ + init_ts;
-            t0 = (ts>=3500) ? 4.0 : 0.1;
-            if ((ts<1000) ){ // || ((ts>=3500) && (ts<4500))) {
+            t0 = (ts>=1875) ? dt*2000 : 0.1;
+            if ((ts<125) || ((ts>=1875) && (ts<2125))) {
                 waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts*dt-t0, src_intensity);
                 printf("update pos %ld, src[%ld]=%.5e\n",src_pos, (size_t)ts, waveSim.u_np1[src_pos]); 
             }
@@ -447,7 +451,7 @@ int main(int argc, char **argv) {
             // apply Dirichlet boundary condition to the scattering on obstacles
             std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), obstacle_m, waveSim.u_np1.begin(), std::multiplies<double>());
         }
-        if (iter_frame % wt_interval == 0) {
+        if ((iter_frame % wt_interval == 0) && (iter_frame>=cr_ts)) {
             writer.BeginStep();
             if (tol_1>0 && tol_2>0) {
                 void *compressed_array_cpu  = NULL;
@@ -479,7 +483,7 @@ int main(int argc, char **argv) {
                 }
                 compression_ratio[0] = data_bytes / (double) compressed_size_u;
                 compression_ratio[1] = data_bytes / (double) compressed_size_dt;
-                std::cout << "compression ratios = " << compression_ratio[0] << " and " << compression_ratio[1] << "\n";
+                std::cout << "compression ratios = " << compression_ratio[0] << " and " << compression_ratio[1] << ", averaged = " << data_bytes*2 / (double) (compressed_size_u + compressed_size_dt) << "\n";
                 void *decompressed_array_cpu = NULL;
                 void *decompressed_array2_cpu = NULL;
                 mgard_x::decompress(compressed_array_cpu, compressed_size_u,
