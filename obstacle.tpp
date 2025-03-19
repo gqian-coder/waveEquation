@@ -151,7 +151,8 @@ double* emulate_N_disk(size_t Nx, size_t Ny, size_t nDisks, size_t max_radius,
 {
     std::random_device rd;  // Non-deterministic random device (for seeding)
     std::mt19937 gen(rd()); // Mersenne Twister pseudo-random generator
-    std::uniform_real_distribution<> dis(0.0, 1.0);
+    std::uniform_real_distribution<> dis(0.4, 1.0);
+    std::uniform_real_distribution<> dis_2(0.0, 1.0);
     
     std::vector<int> radius(nDisks);    
     double *mask = new double [Nx*Ny];
@@ -160,11 +161,11 @@ double* emulate_N_disk(size_t Nx, size_t Ny, size_t nDisks, size_t max_radius,
     std::vector<size_t> x_prev(nDisks, Nx), y_prev(nDisks, Ny);
     size_t x, y;
     for (size_t d=0; d<nDisks; d++) {
-        //radius[d]      = size_t(dis(gen) * max_radius);
-        radius[d] = max_radius;
+        radius[d]      = size_t(dis(gen) * max_radius);
+        //radius[d] = max_radius;
         if ((x_pos.size()<nDisks) || (y_pos.size()<nDisks)) { 
-            float random_x = dis(gen);
-            float random_y = dis(gen);
+            float random_x = dis_2(gen);
+            float random_y = dis_2(gen);
             x = static_cast<size_t>(random_x * (Nx-2*radius[d]-1) + radius[d]);
             y = static_cast<size_t>(random_y * (Ny-2*radius[d]-1) + radius[d]);
             // check for overlapping
@@ -174,8 +175,8 @@ double* emulate_N_disk(size_t Nx, size_t Ny, size_t nDisks, size_t max_radius,
             }
             while (nonOverlap==false) {
                 nonOverlap = true;
-                random_x = dis(gen);
-                random_y = dis(gen);
+                random_x = dis_2(gen);
+                random_y = dis_2(gen);
                 x = static_cast<size_t>(random_x * (Nx-2*radius[d]-1) + radius[d]);
                 y = static_cast<size_t>(random_y * (Ny-2*radius[d]-1) + radius[d]);
                 for (size_t m=0; m<d; m++) {

@@ -276,7 +276,7 @@ void WaveEquation<Real>::update_3d()
             }
             // z = 0, r = 0 or Nx
             for (size_t c=1; c<Ny; c++) {
-                k = c * (Ny+1);
+                k = c * (Nz+1);
                 u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
                                u_n[k+offset_r] + u_n[k+dim1]
                              + u_n[k-Nz-1] + u_n[k+Nz+1]
@@ -289,7 +289,7 @@ void WaveEquation<Real>::update_3d()
             }
             // z = Nz, r = 0 or Nx
             for (size_t c=1; c<Ny; c++) {
-                k = c * (Ny+1) + Nz;
+                k = c * (Nz+1) + Nz;
                 u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (
                                u_n[k+offset_r] + u_n[k+dim1]
                              + u_n[k-Nz-1] + u_n[k+Nz+1]
@@ -304,7 +304,7 @@ void WaveEquation<Real>::update_3d()
             u_np1[0] = 2 * u_n[0] - u_nm1[0] - gamma_t * (u_n[0]-u_nm1[0]) + alpha2[0] * (
                                u_n[offset_r] + u_n[dim1]
                              + u_n[offset_c] + u_n[Nz+1]
-                             + u_n[Nz] + u_n[1] - 6*u_n[k]);
+                             + u_n[Nz] + u_n[1] - 6*u_n[0]);
             // r=Nx, c=0, z=0
             k = offset_r;
             u_np1[k] = 2 * u_n[k] - u_nm1[k] - gamma_t * (u_n[k]-u_nm1[k]) + alpha2[k] * (

@@ -76,7 +76,11 @@ int main(int argc, char **argv) {
 
     std::cout << "original file: " << fname_f.c_str() << "\n";
     std::cout << "c.r. file: " << fname_g.c_str() << "\n";
-    std::cout << "velocity mask file: " << fname_v.c_str() << "\n";
+    if (strcmp(fname_v.c_str(), "NaN")) {
+        std::cout << "velocity mask file: " << fname_v.c_str() << "\n";
+    } else {
+        std::cout << "velocity = " << C << "\n";
+    }
     std::cout << "output file: " << fname_err.c_str() << "\n"; 
     std::cout << "dt = " << dt << ", dh = " << dh << ", init_ts = " << init_ts << "\n";
 
@@ -96,12 +100,13 @@ int main(int argc, char **argv) {
     } else {
         total_Steps = available_Steps;
     }
-    std::cout << "total number of steps: " << variable_f.Steps() << ", read from " << init_ts << " to " << total_Steps << " timestep \n";
+    std::cout << "total number of steps: " << variable_f.Steps() << ", read from " << init_ts << " to " << total_Steps + init_ts << " timestep \n";
     reader_g.Close();
     reader_g = reader_io_g.Open(fname_g, adios2::Mode::Read);
- 
+
     std::vector<std::size_t> shape = variable_f.Shape();
     size_t num_data = shape[0]*shape[1];
+    std::cout << "data space: " << shape[0] << "x" << shape[1] << "\n";
     std::vector<double> var_f(num_data);
     std::vector<double> var_g(num_data);
     // difference data
@@ -142,10 +147,10 @@ int main(int argc, char **argv) {
         }
         variable_f.SetStepSelection({init_ts+cnt, 1});
         reader_f.Get(variable_f, var_f);
-        reader_g.Get(variable_g, var_g); 
         reader_f.PerformGets();
+        variable_g = reader_io_g.InquireVariable<double>("u_data");
+        reader_g.Get(variable_g, var_g);
         reader_g.PerformGets();
-         
         rmse[cnt] = calc_rmse(var_f.data(), var_g.data(), var_e.data(), num_data);
         if (cnt>0) {
             KE_e[cnt] = calc_KE(var_prevE.data(), var_e.data(), wave_c.data(), dt, num_data);

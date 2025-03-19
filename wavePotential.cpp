@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     mgard_x::Config config;
     config.lossless = mgard_x::lossless_type::Huffman_Zstd;
     //config.dev_type = mgard_x::device_type::SERIAL;
-    config.dev_type = mgard_x::device_type::CUDA;
+    //config.dev_type = mgard_x::device_type::CUDA;
     std::vector<mgard_x::SIZE> shape{Nx, Ny};
 
     variable_f.SetStepSelection({init_ts, 1});
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
     double PE_err_s1 = calc_PE(err_s1.data(), PE_s1.data(), dh, shape[0], shape[1]);
 
     reader_f.Close();
-    
+    /*
     FILE *fp = fopen((fname_err+"_l2_s0.bin").c_str(), "w");
     fwrite(err_s0.data(), sizeof(double), num_data, fp);
     fclose(fp);
@@ -129,11 +129,12 @@ int main(int argc, char **argv) {
     fp = fopen((fname_err+"_PE_s1.bin").c_str(), "w");
     fwrite(PE_s1.data(), sizeof(double), num_data, fp);
     fclose(fp);
-    
-    fp = fopen((fname_err+"_data_ori.bin").c_str(), "w");
+    */
+    FILE *fp = fopen((fname_err+"_data_ori.bin").c_str(), "w");
     fwrite(var_f.data(), sizeof(double), num_data, fp);
     fclose(fp);
 
+    /*
     fp = fopen((fname_err+"_data_s0.bin").c_str(), "w");
     fwrite((double *)decompressed_s0, sizeof(double), num_data, fp);
     fclose(fp);
@@ -141,6 +142,7 @@ int main(int argc, char **argv) {
     fp = fopen((fname_err+"_data_s1.bin").c_str(), "w");
     fwrite((double *)decompressed_s1, sizeof(double), num_data, fp);
     fclose(fp);
+    */
     std::cout << "s=0: l2 = " << rmse_s0 << " (rel " << rmse_s0 / (v_max-v_min)<< "), PE_e = " << PE_err_s0 << ", compression ratio = " << (double)(num_data*sizeof(double)) / (double)compressed_size_s0 << "\n";
     std::cout << "s=1: l2 = " << rmse_s1 << " (rel " << rmse_s1 / (v_max-v_min)<< "), PE_e = " << PE_err_s1 << ", compression ratio = " << (double)(num_data*sizeof(double)) / (double)compressed_size_s1 << "\n"; 
 

@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
 
     // dissipation rate
     double gamma   = std::stof(argv[cnt_argv++]); 
-    float temp     = T / dt;
+    float temp     = std::ceil(T / dt);
     size_t nframes = (size_t)(temp);
     // relative tolerance. tol = 0 means to write out uncompressed data after each timestep
     double tol_1   = std::stof(argv[cnt_argv++]);
@@ -280,24 +280,35 @@ int main(int argc, char **argv) {
     waveSim.init_vp(speed_sound.data());
     double *obstacle_m = NULL;
     if (obstacle_t) {
-        switch (obstacle_t) {
-            case 1: {
-                size_t n_disks    = 8;
-                size_t max_radius = size_t(0.015 * Nx);  
-                std::vector<size_t> x_pos = {311, 383, 221, 19, 272, 235, 571, 477, 430, 457};
-                std::vector<size_t> y_pos = {426, 182, 223, 37, 9, 94, 148, 29, 245, 295};
-                obstacle_m        = emulate_N_disk<double>(Nx, Ny, n_disks, max_radius, x_pos, y_pos);
-                break;
+        if (init_fun==0) {
+            FILE *fp = fopen("obstacle_m.bin", "r");
+            obstacle_m = (double *)malloc(sizeof(double) * Nx * Ny);
+            fread(obstacle_m, sizeof(double), Nx*Ny, fp); 
+            fclose(fp);
+            std::cout << "Load obstacle from mask file 'obstacle_m.bin' \n";
+        } else {
+            switch (obstacle_t) {
+                case 1: {
+                    size_t n_disks    = 8;
+                    size_t max_radius = size_t(0.025 * Nx);  
+                    std::vector<size_t> x_pos = {size_t(0.56 * Nx), size_t(0.25 * Nx), size_t(0.42 * Nx), size_t(0.7 * Nx), size_t(0.32 * Nx), size_t(0.75 * Nx), size_t(0.57 * Nx), size_t(0.34 * Nx)};
+                    std::vector<size_t> y_pos = {size_t(0.28 * Ny), size_t(0.32 * Ny), size_t(0.72 * Ny), size_t(0.62 * Ny), size_t(0.77 * Ny), size_t(0.32 * Nx), size_t(0.43 * Nx), size_t(0.5 * Nx)};
+                    obstacle_m        = emulate_N_disk<double>(Nx, Ny, n_disks, max_radius, x_pos, y_pos);
+                    break;
+                }
+                case 2: {
+                    size_t width        = size_t ((1.0/16.0) * Ny);
+                    size_t p1           = size_t ((5.0/16.0) * Ny);
+                    size_t p2           = size_t ((5.0/8.0 ) * Ny);
+                    size_t thickness    = size_t ((1.0/32.0) * Nx);
+                    size_t dist_to_edge = size_t ((1.0/5.0) * Nx);
+                    obstacle_m = emulate_two_slits<double>(Nx, Ny, p1, p2, width, dist_to_edge, thickness);
+                    break;
+                }
             }
-            case 2: {
-                size_t width        = size_t ((1.0/16.0) * Ny);
-                size_t p1           = size_t ((5.0/16.0) * Ny);
-                size_t p2           = size_t ((5.0/8.0 ) * Ny);
-                size_t thickness    = size_t ((1.0/32.0) * Nx);
-                size_t dist_to_edge = size_t ((1.0/5.0) * Nx);
-                obstacle_m = emulate_two_slits<double>(Nx, Ny, p1, p2, width, dist_to_edge, thickness);
-                break;
-            }
+            FILE *fp = fopen("obstacle_m.bin", "w");
+            fwrite(obstacle_m, sizeof(double), Nx*Ny, fp);
+            fclose(fp);
         }
     }
 
@@ -436,11 +447,12 @@ int main(int argc, char **argv) {
         if (iter_frame % wt_interval == 0) std::cout << iter_frame << "/" << nframes << "\n";
         // source update
         if ((src_on) && (init_fun || iter_frame || ((tol_1*tol_2==0) && (init_ts)>0))) {
-            double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
+            double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 1 : 0) : 0; /* c.r. from t=2*/;
             ts += (double)(iter_frame + 1) + src_ts /* secondary c.r. */ + init_ts;
-            t0 = (ts>=1875) ? dt*2000 : 0.1;
-            if ((ts<125) || ((ts>=1875) && (ts<2125))) {
-                waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts*dt-t0, src_intensity);
+            //t0 = (ts>=4.4) ? 4.5 : 0.1;
+            ts  = ts * dt;
+            if ((ts<0.25) ){ //|| ((ts>=4.4) && (ts<4.6))) {
+                waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts-t0, src_intensity);
                 printf("update pos %ld, src[%ld]=%.5e\n",src_pos, (size_t)ts, waveSim.u_np1[src_pos]); 
             }
         }
@@ -454,6 +466,18 @@ int main(int argc, char **argv) {
         if ((iter_frame % wt_interval == 0) && (iter_frame>=cr_ts)) {
             writer.BeginStep();
             if (tol_1>0 && tol_2>0) {
+                // calculate the average velocity
+                double v_aver = 0.0;
+                size_t cnt_v  = 0;
+                double thresh = 1e-10;
+                double cnt_d  = (double)(Nx*Ny);
+                for (size_t i=0; i<Nx*Ny; i++) {
+                    if (speed_sound.data()[i] > thresh) {
+                        v_aver += speed_sound.data()[i]*speed_sound.data()[i] / cnt_d; 
+                    }
+                }
+                std::cout << "Averaged speed of sound (v**2) = " << v_aver << "\n";
+                
                 void *compressed_array_cpu  = NULL;
                 void *compressed_array2_cpu = NULL;
                 std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), waveSim.u_n.begin(), u_at.begin(), std::plus<double>());

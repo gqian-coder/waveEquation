@@ -169,8 +169,11 @@ int main(int argc, char **argv) {
     // wave source time
     bool src_on   = std::stoi(argv[cnt_argv++]);    
     double src_ts = std::stof(argv[cnt_argv++]);
+    // to write out data after cr_ts
+    size_t cr_ts  = std::stoi(argv[cnt_argv++]);
 
     std::vector<size_t> dShape = {Nx, Ny, Nz};
+    size_t cnt_data = Nx*Ny*Nz;
 
     std::cout << "simulating a domain of [" << Dx << "/" << Nx << ", " << Dy << "/" << Ny << ", " << Dz << "/" << Nz << "], at a spacing of " << dh << "\n";
     std::cout << "simulating " << nframes << " steps at a resolution of " << dt << "\n";
@@ -212,14 +215,15 @@ int main(int argc, char **argv) {
 
     adios2::Engine writer = writer_io.Open(fname_wt, adios2::Mode::Write);
     adios2::Variable<double> variable_u, variable_u_dt, variable_cr;
-    variable_u  = writer_io.DefineVariable<double>("u_data" , adios2::Dims{Nx, Ny, Nz}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
+    variable_u    = writer_io.DefineVariable<double>("u_data" , adios2::Dims{Nx, Ny, Nz}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
+    // store the non-zero masks
     std::vector<double> u_dt, u_at;
     if (tol_1>0 || tol_2>0) {
         // compression ratio of u_n and u_n-u_np1
         variable_cr = writer_io.DefineVariable<double>("u_CR"   , adios2::Dims{3}, adios2::Dims{0}, adios2::Dims{3});
         variable_u_dt = writer_io.DefineVariable<double>("u_dt", adios2::Dims{Nx, Ny, Nz}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
-        u_dt.resize(Nx*Ny*Nz);
-        u_at.resize(Nx*Ny*Nz);
+        u_dt.resize(cnt_data);
+        u_at.resize(cnt_data);
     }
     
     size_t dim2 = Ny * Nz; 
@@ -230,11 +234,11 @@ int main(int argc, char **argv) {
     float drop_probability = 1;
     std::vector<double> gauss_template;
     double NDx = 12, NDy=24, NDz=24;
-    size_t n_drops = 6;
+    size_t n_drops = 3;
     // for Gaussian pulse source
     double f0 = 100; // dominant frequency of the source (Hz)
-    double t0 = 1; // source time shift (s) 
-    size_t srcx = size_t(Dx * 0.4 / dh); 
+    double t0 = 0.1; // source time shift (s) 
+    size_t srcx = size_t(Dx * 0.5 / dh); 
     size_t srcy = size_t(Dy * 0.5 / dh);
     size_t srcz = size_t(Dz * 0.5 / dh);
     size_t src_pos = srcx * dim2 + srcy*Nz + srcz;
@@ -338,14 +342,16 @@ int main(int argc, char **argv) {
             adios2::Variable<double> variable;
             if ((tol_1==0) && (tol_2==0) && (init_ts>0)) { // checkpoint restart 
                 // load the checkpoint data compressed using optimized approach 
+                std::cout << "read u_dt\n";
                 variable = reader_io.InquireVariable<double>("u_dt"); 
             } else {
                 // load the checkpoint data compressed using non-optimized approach
+                std::cout << "read u_{n}\n";
                 variable = reader_io.InquireVariable<double>("u_data");
             }
             std::cout << "total number of steps: " << variable.Steps() << ", read from " << init_ts << " timestep \n";
-            std::vector<double> init_vpre(Nx*Ny*Nz);
-            std::vector<double> init_v(Nx*Ny*Nz); 
+            std::vector<double> init_vpre(cnt_data);
+            std::vector<double> init_v(cnt_data); 
             variable.SetSelection({adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz}});
             variable.SetStepSelection({init_ts, 1}); 
             reader.Get(variable, init_vpre.data());
@@ -425,9 +431,9 @@ int main(int argc, char **argv) {
         if ((src_on) && (init_fun || iter_frame || ((tol_1*tol_2==0) && (init_ts)>0))) {
             double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
             ts += (double)(iter_frame + 1) + src_ts /* secondary c.r. */ + init_ts;
-            t0 = (ts>=3500) ? 4.0 : 0.1;
-            if ((ts<1000) ){ // || ((ts>=3500) && (ts<4500))) {
-                waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts*dt-t0, src_intensity);
+            ts  = ts * dt; 
+            if (ts<0.25) { 
+                waveSim.u_np1[src_pos] = src_Gaussian_pulse(f0, ts-t0, src_intensity);
                 printf("update pos [%ld, %ld, %ld], src[%ld]=%.5e\n",srcx, srcy, srcz, (size_t)ts, waveSim.u_np1[src_pos]); 
             }
         }
@@ -438,7 +444,7 @@ int main(int argc, char **argv) {
             // apply Dirichlet boundary condition to the scattering on obstacles
             std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), obstacle_m, waveSim.u_np1.begin(), std::multiplies<double>());
         }
-        if (iter_frame % wt_interval == 0) {
+        if ((iter_frame % wt_interval == 0) && (iter_frame>=cr_ts)) {
             writer.BeginStep();
             if (tol_1>0 && tol_2>0) {
                 void *compressed_array_cpu  = NULL;
@@ -480,6 +486,15 @@ int main(int argc, char **argv) {
             
                 //error_calc(waveSim.u_np1, (double *)decompressed_array_cpu, tol_1); 
                 //error_calc(u_dt, (double *)decompressed_array2_cpu, tol_2);
+            
+                // maintain a noise free background
+                //std::cout << "applying mask\n";
+                //double *pt_du_at = static_cast<double*>(decompressed_array_cpu);
+                //double *pt_du_dt = static_cast<double*>(decompressed_array2_cpu);
+                //for (size_t k=0; k<cnt_data; k ++) {
+                //    if (!u_at[k]) pt_du_at[k]  = 0; 
+                //    if (!u_dt[k]) pt_du_dt[k] = 0;
+                //}
                 writer.Put<double>(variable_u   , (double *)decompressed_array_cpu , adios2::Mode::Sync);
                 writer.Put<double>(variable_u_dt, (double *)decompressed_array2_cpu, adios2::Mode::Sync);
                 writer.Put<double>(variable_cr, compression_ratio.data(), adios2::Mode::Sync);
@@ -498,9 +513,18 @@ int main(int argc, char **argv) {
                 void *decompressed_array_cpu = NULL;
                 mgard_x::decompress(compressed_array_cpu, compressed_size_u,
                     decompressed_array_cpu, config, false);
+                // maintain a noise free background
+                //std::cout << "applying mask and wt errors\n";
+                //double *pt_du = static_cast<double*>(decompressed_array_cpu);
+                //for (size_t k=0; k<cnt_data; k++) {
+                    //if (!waveSim.u_n.data()[k]) pt_du[k] = 0; 
+                    // save the error instead of the reconstructed data
+                //    pt_du[k] = waveSim.u_n.data()[k] - pt_du[k];
+                //} 
+                 
                 writer.Put<double>(variable_u   , (double *)decompressed_array_cpu , adios2::Mode::Sync);
-                double PE = potential_energy(waveSim.u_n.data(), (double *)decompressed_array_cpu, dShape);
-                printf("PE = %.8f, eb / sqrt(PE) = %.8f\n", std::sqrt(PE), tol_1 / std::sqrt(PE));
+                //double PE = potential_energy(waveSim.u_n.data(), decompressed_array_cpu, dShape);
+                //printf("PE = %.8f, eb / sqrt(PE) = %.8f\n", std::sqrt(PE), tol_1 / std::sqrt(PE));
             } 
             else { // no compression
                 writer.Put<double>(variable_u, waveSim.u_n.data(), adios2::Mode::Sync);
