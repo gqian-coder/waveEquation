@@ -17,10 +17,12 @@ Params:
 - fname: pre-existing file for loading the checkpoint data
 - init_ts: checkpoint restart timestep 
 
-Example: 
-- 3D wave equation, multiple rain drops, Mur condition, dissipation rate of 5e-3, writing out the uncompressed data:
-    ./waveProp_3d 3 false false 2 20 20 20 0.1 0.2 80 0.2 5e-3 0.0 ABS fiveRainDrop_20_20_20_h01_t02_Mur.bp nan 0 
-- previous case, with compression:
-    ./waveProp_3d 3 false false 2 20 20 20 0.1 0.2 80 0.2 5e-3 1e-3 ABS fiveRainDrop_20_20_20_h01_t02_Mur_mgr_abs_1e-3.bp fiveRainDrop_20_20_20_h01_t02_Mur.bp 0 
-- checkpoint restart @ the 1000th timestep, propagating the erronous data to 3000 timesteps and writing out the timestep results:
-    ./waveProp_3d 3 false false 2 20 20 20 0.1 0.2 60 0.2 1e-3 0.0 ABS fiveRainDrop_20_20_20_h01_t02_Mur_mgr_abs_1e-3_start_1000ts.bp fiveRainDrop_20_20_20_h01_t02_Mur_mgr_abs_1e-3.bp 1000 
+Scripts to reproduce the wave equation simulation and the C/R with lossy compression: 
+1) Compression with mgard energy error control
+    mgard_energy_eval.sh
+2) Compression with regular mgard l2 error control
+    mgard_l2_eval.sh
+3) Compression with sz3 l-inf error control
+    sz_eval.sh
+5) Compression with zfp l-inf error control
+    zfp_eval.sh
