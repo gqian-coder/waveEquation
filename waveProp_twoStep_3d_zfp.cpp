@@ -10,11 +10,101 @@
 #include <string.h>
 
 #include "adios2.h"
-#include "mgard/compress_x.hpp"
+#include <zfp.h>
 #include "waveEquation.hpp"
-#include <zstd.h>
 #include "waveInit.hpp"
 #include "obstacle.hpp"
+
+unsigned char * zfp_compress(double * array, double tolerance, size_t r1, size_t r2, size_t r3, size_t *out_size){
+    zfp_type type;     /* array scalar type */
+    zfp_field* field;  /* array meta data */
+    zfp_stream* zfp;   /* compressed stream */
+    void* buffer;      /* storage for compressed stream */
+    size_t bufsize;    /* byte size of compressed buffer */
+    bitstream* stream; /* bit stream to write to or read from */
+    size_t zfpsize;    /* byte size of compressed stream */
+
+    /* allocate meta data for the 3D array a[nz][ny][nx] */
+    type = zfp_type_double;
+    if ((r1==1) && (r2==1)) {
+        field = zfp_field_1d(array, type, r3);
+    } else if (r1==1) {
+        field = zfp_field_2d(array, type, r2, r3);
+    }
+    else {
+        field = zfp_field_3d(array, type, r1, r2, r3);
+    }
+    /* allocate meta data for a compressed stream */
+    zfp = zfp_stream_open(NULL);
+
+    /* set compression mode and parameters via one of three functions */
+    /*  zfp_stream_set_rate(zfp, rate, type, 3, 0); */
+    /*  zfp_stream_set_precision(zfp, precision); */
+    zfp_stream_set_accuracy(zfp, tolerance);
+
+    /* allocate buffer for compressed data */
+    bufsize = zfp_stream_maximum_size(zfp, field);
+    buffer = malloc(bufsize);
+
+    /* associate bit stream with allocated buffer */
+    stream = stream_open(buffer, bufsize);
+    zfp_stream_set_bit_stream(zfp, stream);
+    zfp_stream_rewind(zfp);
+
+    zfpsize = zfp_compress(zfp, field);
+
+    zfp_field_free(field);
+    zfp_stream_close(zfp);
+    stream_close(stream);
+    *out_size = zfpsize;
+    return (unsigned char *)buffer;
+}
+
+double * zfp_decompress(unsigned char * comp_data, double tolerance, size_t buffer_size, size_t r1, size_t r2, size_t r3){
+    zfp_type type;     /* array scalar type */
+    zfp_field* field;  /* array meta data */
+    zfp_stream* zfp;   /* compressed stream */
+    void* buffer;      /* storage for compressed stream */
+    size_t bufsize;    /* byte size of compressed buffer */
+    bitstream* stream; /* bit stream to write to or read from */
+
+    /* allocate meta data for the 3D array a[nz][ny][nx] */
+    double * array = (double *) malloc(r1 * r2 * r3 * sizeof(double));
+    type = zfp_type_double;
+    if ((r1==1) &&(r2==1)) {
+        field = zfp_field_1d(array, type, r3);
+    } else if (r1==1) {
+        field = zfp_field_2d(array, type, r3, r2);
+    }
+    else
+        field = zfp_field_3d(array, type, r3, r2, r1);
+
+    /* allocate meta data for a compressed stream */
+    zfp = zfp_stream_open(NULL);
+
+    /* set compression mode and parameters via one of three functions */
+    /*  zfp_stream_set_rate(zfp, rate, type, 3, 0); */
+    /*  zfp_stream_set_precision(zfp, precision); */
+    zfp_stream_set_accuracy(zfp, tolerance);
+
+    /* allocate buffer for compressed data */
+    bufsize = zfp_stream_maximum_size(zfp, field);
+    // buffer = malloc(bufsize);
+    buffer = (void *) comp_data;
+    bufsize = buffer_size;
+
+    /* associate bit stream with allocated buffer */
+    stream = stream_open(buffer, bufsize);
+    zfp_stream_set_bit_stream(zfp, stream);
+    zfp_stream_rewind(zfp);
+
+    zfp_decompress(zfp, field);
+
+    zfp_field_free(field);
+    zfp_stream_close(zfp);
+    stream_close(stream);
+    return array;
+}
 
 template <typename T>
 double potential_energy(T *var_in, T *var_out, std::vector<size_t>dShape)
@@ -153,11 +243,7 @@ int main(int argc, char **argv) {
     float temp     = T / dt;
     size_t nframes = (size_t)(temp);
     // relative tolerance. tol = 0 means to write out uncompressed data after each timestep
-    double tol_1   = std::stof(argv[cnt_argv++]);
-    // using tol_1 for compressing u_curr, and tol_2  for u_next
-    double tol_2   = std::stof(argv[cnt_argv++]);
-    // error type
-    std::string eb_type(argv[cnt_argv++]);
+    double tol     = std::stof(argv[cnt_argv++]);
     // write out filename
     std::string fname_wt(argv[cnt_argv++]);
     // readin filename
@@ -206,7 +292,7 @@ int main(int argc, char **argv) {
     } else if (!strcmp(material_type.c_str(), "mask")) {
         std::cout << "simulating material space using mask data\n"; 
     }
-    std::cout << "tolerance = {" << tol_1 << ", " << tol_2 << "} for u_n and u_dt \n";
+    std::cout << "tolerance = " << tol << " for u_n \n";
 
     if (src_on) std::cout << "turn on a  Gaussian derivative source with a relative ts = " << src_ts << "\n"; 
     
@@ -214,18 +300,9 @@ int main(int argc, char **argv) {
     adios2::IO writer_io = ad.DeclareIO("Output");
 
     adios2::Engine writer = writer_io.Open(fname_wt, adios2::Mode::Write);
-    adios2::Variable<double> variable_u, variable_u_dt, variable_cr;
+    adios2::Variable<double> variable_u;
     variable_u    = writer_io.DefineVariable<double>("u_data" , adios2::Dims{Nx, Ny, Nz}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
     // store the non-zero masks
-    std::vector<double> u_dt, u_at;
-    if (tol_1>0 || tol_2>0) {
-        // compression ratio of u_n and u_n-u_np1
-        variable_cr = writer_io.DefineVariable<double>("u_CR"   , adios2::Dims{3}, adios2::Dims{0}, adios2::Dims{3});
-        variable_u_dt = writer_io.DefineVariable<double>("u_dt", adios2::Dims{Nx, Ny, Nz}, adios2::Dims{0,0,0}, adios2::Dims{Nx, Ny, Nz});
-        u_dt.resize(cnt_data);
-        u_at.resize(cnt_data);
-    }
-    
     size_t dim2 = Ny * Nz; 
     double max_intensity = 10.0;
     // for Gaussian wave
@@ -243,18 +320,8 @@ int main(int argc, char **argv) {
     size_t srcz = size_t(Dz * 0.5 / dh);
     size_t src_pos = srcx * dim2 + srcy*Nz + srcz;
     double src_intensity = 50.0;
-    // for compression
-    double s1 = 1.0, s2 = 0.0; 
 
-    // compression parameters
-    mgard_x::Config config;
-    config.lossless = mgard_x::lossless_type::Huffman_Zstd;
-    config.normalize_coordinates = true;
-    //config.dev_type = mgard_x::device_type::SERIAL;
-    //config.dev_type = mgard_x::device_type::CUDA;
-    //config.dev_id   = 1;
-    std::vector<mgard_x::SIZE> shape{Nx, Ny, Nz};
-    size_t compressed_size_u = 0, compressed_size_dt = 0;
+    size_t compressed_size_u = 0;
     double data_bytes = (double) Nx * Ny * Nz * sizeof(double);
     std::vector<double> compression_ratio(2);
     WaveEquation <double> waveSim(Nx-1, Ny-1, Nz-1, dt, dh, gamma, cfd_cond); 
@@ -341,15 +408,10 @@ int main(int argc, char **argv) {
             reader_io.SetEngine("BP");
             adios2::Engine reader = reader_io.Open(fname, adios2::Mode::ReadRandomAccess);
             adios2::Variable<double> variable;
-            if ((tol_1==0) && (tol_2==0) && (init_ts>0)) { // checkpoint restart 
-                // load the checkpoint data compressed using optimized approach 
-                std::cout << "read u_dt\n";
-                variable = reader_io.InquireVariable<double>("u_dt"); 
-            } else {
-                // load the checkpoint data compressed using non-optimized approach
-                std::cout << "read u_{n}\n";
-                variable = reader_io.InquireVariable<double>("u_data");
-            }
+            // load the checkpoint data compressed using non-optimized approach
+            std::cout << "read u_{n}\n";
+            variable = reader_io.InquireVariable<double>("u_data");
+            
             std::cout << "total number of steps: " << variable.Steps() << ", read from " << init_ts << " timestep \n";
             std::vector<double> init_vpre(cnt_data);
             std::vector<double> init_v(cnt_data); 
@@ -359,32 +421,19 @@ int main(int argc, char **argv) {
             reader.PerformGets();
             std::cout << "u_prev: min/max = " << *std::min_element(init_vpre.begin(), init_vpre.end()) << ", " << *std::max_element(init_vpre.begin(), init_vpre.end()) << "\n";
             std::cout << "begin to load the current step...\n";
-            if ((init_ts>0)  && (tol_1==0) && (tol_2==0)) {  
-                std::cout << "read u_dt\n";
-                variable = reader_io.InquireVariable<double>("u_data");
-                variable.SetStepSelection({init_ts, 1});
-            } else {
-                std::cout << "read u_{n+1}\n";
-                variable.SetStepSelection({init_ts+1, 1});
-            }
+            std::cout << "read u_{n+1}\n";
+            variable.SetStepSelection({init_ts+1, 1});
+            
             reader.Get(variable, init_v.data());
             reader.PerformGets();
             std::cout <<  "u_curr: min/max = " << *std::min_element(init_v.begin(), init_v.end()) << ", " << *std::max_element(init_v.begin(), init_v.end()) << "\n";
-            if ((init_ts>0) && (tol_1==0) && (tol_2==0)) {  // change u_n - u_nm1 and (u_n+u_nm1)/2 to u_n and u_mn1
-                std::transform(init_vpre.begin(), init_vpre.end(), init_vpre.begin(), [](double num) { return num / 2.0; });
-                std::vector<double> u_A(init_v);
-                // u_n = u_A + 0.5*u_dt
-                std::transform(init_v.begin(), init_v.end(), init_vpre.begin(), init_v.begin(), std::plus<double>()); 
-                // u_{n-1} = u_A - 0.5*u_dt
-                std::transform(u_A.begin(), u_A.end(), init_vpre.begin(), init_vpre.begin(), std::minus<double>());
-                u_A.clear();
-            }
+            
             waveSim.init_u_n(init_vpre.data());
             waveSim.init_u_np1(init_v.data());
             reader.Close();
             init_v.clear();
             init_vpre.clear(); 
-            if ((tol_1==0) && (tol_2==0)) {
+            if (tol==0) {
                 writer.BeginStep();
                 writer.Put<double>(variable_u, waveSim.u_n.data(), adios2::Mode::Sync);
                 writer.PerformPuts();
@@ -429,8 +478,8 @@ int main(int argc, char **argv) {
     while (iter_frame<nframes) {
         std::cout << iter_frame << "/" << nframes << "\n";
         // source update
-        if ((src_on) && (init_fun || iter_frame || ((tol_1*tol_2==0) && (init_ts)>0))) {
-            double ts = (init_fun==0) ? ((tol_1*tol_2==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
+        if ((src_on) && (init_fun || iter_frame || ((tol==0) && (init_ts)>0))) {
+            double ts = (init_fun==0) ? ((tol==0) ? 2 : 1) : 0; /* c.r. from t=2*/;
             ts += (double)(iter_frame + 1) + src_ts /* secondary c.r. */ + init_ts;
             ts  = ts * dt; 
             if (ts<0.25) { 
@@ -447,86 +496,13 @@ int main(int argc, char **argv) {
         }
         if ((iter_frame % wt_interval == 0) && (iter_frame>=cr_ts)) {
             writer.BeginStep();
-            if (tol_1>0 && tol_2>0) {
-                void *compressed_array_cpu  = NULL;
-                void *compressed_array2_cpu = NULL;
-                std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), waveSim.u_n.begin(), u_at.begin(), std::plus<double>());
-                std::transform(u_at.begin(), u_at.end(), u_at.begin(), [](double num) { return num / 2.0; });
-                std::transform(waveSim.u_np1.begin(), waveSim.u_np1.end(), waveSim.u_n.begin(), u_dt.begin(), std::minus<double>());
-                if (obstacle_t) {
-                    // apply Dirichlet boundary condition to the scattering on obstacles
-                    std::transform(u_dt.begin(), u_dt.end(), obstacle_m, u_dt.begin(), std::multiplies<double>());
-                    std::transform(u_at.begin(), u_at.end(), obstacle_m, u_at.begin(), std::multiplies<double>());
-                }
-                if (strcmp(eb_type.c_str(), "ABS")==0) {
-                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s1,
-                        mgard_x::error_bound_type::ABS, u_at.data(),
-                        compressed_array_cpu, compressed_size_u, config, false);
-                
-                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_2, s2,
-                        mgard_x::error_bound_type::ABS, u_dt.data(),
-                        compressed_array2_cpu, compressed_size_dt, config, false);
-                } else {
-                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s1,
-                        mgard_x::error_bound_type::REL, u_at.data(),
-                        compressed_array_cpu, compressed_size_u, config, false);
-
-                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_2, s2,
-                        mgard_x::error_bound_type::REL, u_dt.data(),
-                        compressed_array2_cpu, compressed_size_dt, config, false);
-                }
-                compression_ratio[0] = data_bytes / (double) compressed_size_u;
-                compression_ratio[1] = data_bytes / (double) compressed_size_dt;
-                std::cout << "compression ratios = " << compression_ratio[0] << " and " << compression_ratio[1] << "\n";
-                void *decompressed_array_cpu = NULL;
-                void *decompressed_array2_cpu = NULL;
-                mgard_x::decompress(compressed_array_cpu, compressed_size_u,
-                    decompressed_array_cpu, config, false);
-                mgard_x::decompress(compressed_array2_cpu, compressed_size_dt,
-                    decompressed_array2_cpu, config, false);
-            
-                //error_calc(waveSim.u_np1, (double *)decompressed_array_cpu, tol_1); 
-                //error_calc(u_dt, (double *)decompressed_array2_cpu, tol_2);
-            
-                // maintain a noise free background
-                //std::cout << "applying mask\n";
-                //double *pt_du_at = static_cast<double*>(decompressed_array_cpu);
-                //double *pt_du_dt = static_cast<double*>(decompressed_array2_cpu);
-                //for (size_t k=0; k<cnt_data; k ++) {
-                //    if (!u_at[k]) pt_du_at[k]  = 0; 
-                //    if (!u_dt[k]) pt_du_dt[k] = 0;
-                //}
-                writer.Put<double>(variable_u   , (double *)decompressed_array_cpu , adios2::Mode::Sync);
-                writer.Put<double>(variable_u_dt, (double *)decompressed_array2_cpu, adios2::Mode::Sync);
-                writer.Put<double>(variable_cr, compression_ratio.data(), adios2::Mode::Sync);
-            } else if (tol_1>0 && tol_2==0) {  // non-optimized compression
-                void *compressed_array_cpu  = NULL;
-                std::cout << "compression\n";
-                if (strcmp(eb_type.c_str(), "ABS")==0) {
-                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s2,
-                        mgard_x::error_bound_type::ABS, waveSim.u_n.data(),
-                        compressed_array_cpu, compressed_size_u, config, false);
-                } else {
-                    mgard_x::compress(3, mgard_x::data_type::Double, shape, tol_1, s2,
-                        mgard_x::error_bound_type::REL, waveSim.u_n.data(),
-                        compressed_array_cpu, compressed_size_u, config, false);
-                }
+            if (tol>0) {  // non-optimized compression
+                unsigned char * compressed = zfp_compress(waveSim.u_n.data(), tol, Nx, Ny, Nz, &compressed_size_u); 
                 std::cout << "compression ratios = " << data_bytes / (double) compressed_size_u << "\n";
-                void *decompressed_array_cpu = NULL;
-                mgard_x::decompress(compressed_array_cpu, compressed_size_u,
-                    decompressed_array_cpu, config, false);
-                // maintain a noise free background
-                //std::cout << "applying mask and wt errors\n";
-                //double *pt_du = static_cast<double*>(decompressed_array_cpu);
-                //for (size_t k=0; k<cnt_data; k++) {
-                    //if (!waveSim.u_n.data()[k]) pt_du[k] = 0; 
-                    // save the error instead of the reconstructed data
-                //    pt_du[k] = waveSim.u_n.data()[k] - pt_du[k];
-                //} 
-                 
-                writer.Put<double>(variable_u   , (double *)decompressed_array_cpu , adios2::Mode::Sync);
-                //double PE = potential_energy(waveSim.u_n.data(), decompressed_array_cpu, dShape);
-                //printf("PE = %.8f, eb / sqrt(PE) = %.8f\n", std::sqrt(PE), tol_1 / std::sqrt(PE));
+                double *decompressed = zfp_decompress(compressed, tol, compressed_size_u, Nx, Ny, Nz); 
+                writer.Put<double>(variable_u, (double *)decompressed, adios2::Mode::Sync);
+                //double PE = potential_energy(waveSim.u_n.data(), decompressed, dShape);
+                //printf("PE = %.8f, eb / sqrt(PE) = %.8f\n", std::sqrt(PE), tol / std::sqrt(PE));
             } 
             else { // no compression
                 writer.Put<double>(variable_u, waveSim.u_n.data(), adios2::Mode::Sync);
@@ -538,8 +514,6 @@ int main(int argc, char **argv) {
     }
     writer.Close();
     
-    u_dt.clear();
-    u_at.clear();
     delete [] obstacle_m;
     MPI_Finalize();
     return 0;

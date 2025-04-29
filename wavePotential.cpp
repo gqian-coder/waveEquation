@@ -76,6 +76,7 @@ int main(int argc, char **argv) {
 
     // compression parameters
     mgard_x::Config config;
+    config.normalize_coordinates = true;
     config.lossless = mgard_x::lossless_type::Huffman_Zstd;
     //config.dev_type = mgard_x::device_type::SERIAL;
     //config.dev_type = mgard_x::device_type::CUDA;
@@ -144,7 +145,7 @@ int main(int argc, char **argv) {
     fclose(fp);
     */
     std::cout << "s=0: l2 = " << rmse_s0 << " (rel " << rmse_s0 / (v_max-v_min)<< "), PE_e = " << PE_err_s0 << ", compression ratio = " << (double)(num_data*sizeof(double)) / (double)compressed_size_s0 << "\n";
-    std::cout << "s=1: l2 = " << rmse_s1 << " (rel " << rmse_s1 / (v_max-v_min)<< "), PE_e = " << PE_err_s1 << ", compression ratio = " << (double)(num_data*sizeof(double)) / (double)compressed_size_s1 << "\n"; 
+    std::cout << "s=1: l2 = " << rmse_s1 << " (rel " << rmse_s1 / (v_max-v_min)<< "), PE_e = " << PE_err_s1 << ", eb/PE = " << tol_s1 / std::sqrt(PE_err_s1) <<", compression ratio = " << (double)(num_data*sizeof(double)) / (double)compressed_size_s1 << "\n"; 
 
     return 0;
 }

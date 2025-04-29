@@ -343,10 +343,10 @@ void fun_MultiRainDrop(Real *u, size_t Nx, size_t Ny, size_t Nz,
     float random_number = dis(gen);
     //std::cout << "probability: " << random_number << "\n";
     // try not to generate rain drops closing to edges
-    std::vector<float> px  = {0.275, 0.65, 0.35, 0.7};
-    std::vector<float> py  = {0.35, 0.3, 0.725, 0.65};
-    std::vector<float> pz  = {0.34, 0.56, 0.75, 0.25};
-    std::vector<float> mag = {0.7, 0.5, 0.85, 0.6};
+    std::vector<float> px  = {0.275, 0.65, 0.35, 0.7, 0.8};
+    std::vector<float> py  = {0.35, 0.3, 0.725, 0.65, 0.3};
+    std::vector<float> pz  = {0.34, 0.56, 0.75, 0.25, 0.58};
+    std::vector<float> mag = {0.7, 0.5, 0.85, 0.6, 0.9};
     for (size_t d=0; d<nDrops; d++) {
         if (random_number < drop_probability) {
             float random_x = px[d];//dis(gen);
